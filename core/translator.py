@@ -38,19 +38,30 @@ class Translator:
         Returns:
             Translated text or original if translation fails
         """
-        if not self._enabled or not text or not text.strip():
+        logger.info(f"Translation requested: enabled={self._enabled}, text='{text[:50]}...'")
+
+        if not self._enabled:
+            logger.debug("Translation disabled, returning original")
+            return text
+
+        if not text or not text.strip():
+            logger.debug("Empty text, returning original")
             return text
 
         # Don't translate if text is mostly Chinese already
         if self._is_mostly_chinese(text):
+            logger.info("Text is mostly Chinese, skipping translation")
             return text
 
         try:
             # Lazy import to avoid slow startup
             if self._translator is None:
+                logger.info("Initializing Google Translator...")
                 from googletrans import Translator as GoogleTranslator
                 self._translator = GoogleTranslator()
+                logger.info("Google Translator initialized")
 
+            logger.info(f"Translating: {text[:100]}...")
             result = self._translator.translate(
                 text,
                 src=self._source_lang,
@@ -58,11 +69,15 @@ class Translator:
             )
 
             if result and result.text:
+                logger.info(f"Translation result: {result.text[:100]}...")
                 return result.text
+            else:
+                logger.warning("Translation returned empty result")
 
         except Exception as e:
-            logger.warning(f"Translation failed: {e}")
-            # Return original text with a marker
+            logger.error(f"Translation failed: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
             return text
 
         return text
