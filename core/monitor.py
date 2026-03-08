@@ -59,6 +59,7 @@ class Monitor(QObject):
     def set_ocr_engine(self, engine: BaseOCREngine):
         """Set the OCR engine to use."""
         self.ocr_engine = engine
+        logger.info(f"OCR engine set to: {engine.name if engine else None}")
 
     def set_plugin(self, plugin: Optional[Plugin]):
         """Set the active plugin."""
@@ -73,18 +74,27 @@ class Monitor(QObject):
     def set_region(self, x: int, y: int, width: int, height: int):
         """Set the region to monitor."""
         self.region = (x, y, width, height)
+        logger.info(f"Region set to: ({x}, {y}) {width}x{height}")
 
     def start(self):
         """Start monitoring."""
+        logger.info(f"Attempting to start monitoring...")
+        logger.info(f"  _is_running: {self._is_running}")
+        logger.info(f"  ocr_engine: {self.ocr_engine}")
+        logger.info(f"  region: {self.region}")
+
         if self._is_running:
+            logger.info("Already running, returning")
             return
 
         if not self.ocr_engine:
             self.error_occurred.emit("No OCR engine selected")
+            logger.error("Cannot start: No OCR engine selected")
             return
 
         if not self.region:
             self.error_occurred.emit("No region selected")
+            logger.error("Cannot start: No region selected")
             return
 
         self._is_running = True

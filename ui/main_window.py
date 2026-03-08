@@ -150,14 +150,14 @@ class MainWindow(QMainWindow):
             elif ocr_type == "windows":
                 self.current_ocr = WindowsOCREngine()
 
-            if self.current_ocr and not self.current_ocr.is_available:
+            if self.current_ocr and self.current_ocr.is_available:
+                self.ocr_changed.emit(self.current_ocr)
+            else:
                 QMessageBox.warning(
                     self,
                     "OCR\u5f15\u64ce\u4e0d\u53ef\u7528",
-                    f"{self.current_ocr.name} \u4e0d\u53ef\u7528\u3002\n\u8bf7\u68c0\u67e5\u60a8\u7684\u5b89\u88c5\u3002"
+                    f"{self.current_ocr.name if self.current_ocr else 'OCR'} \u4e0d\u53ef\u7528\u3002\n\u8bf7\u68c0\u67e5\u60a8\u7684\u5b89\u88c5\u3002"
                 )
-            else:
-                self.ocr_changed.emit(self.current_ocr)
 
         except Exception as e:
             logger.error(f"Error initializing OCR engine: {e}")
@@ -188,6 +188,7 @@ class MainWindow(QMainWindow):
 
     def _on_start_clicked(self):
         """Handle start button click."""
+        logger.info("Start button clicked")
         self.start_monitoring_requested.emit()
         self.start_btn.setEnabled(False)
         self.stop_btn.setEnabled(True)
