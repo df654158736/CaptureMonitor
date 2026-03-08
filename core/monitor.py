@@ -9,6 +9,7 @@ import logging
 
 from core.ocr.base import BaseOCREngine
 from core.plugin_loader import Plugin
+from core.translator import Translator
 from utils.screen_capture import capture_region
 
 logger = logging.getLogger(__name__)
@@ -17,15 +18,19 @@ logger = logging.getLogger(__name__)
 class HistoryEntry:
     """Represents a single history entry."""
 
-    def __init__(self, timestamp: datetime, plugin_name: str, content: str, is_change: bool = False):
+    def __init__(self, timestamp: datetime, plugin_name: str, content: str,
+                 is_change: bool = False, translated_content: str = None):
         self.timestamp = timestamp
         self.plugin_name = plugin_name
         self.content = content
         self.is_change = is_change
+        self.translated_content = translated_content
 
     def __str__(self):
         time_str = self.timestamp.strftime("%H:%M:%S")
         prefix = "\u26a0\ufe0f " if self.is_change else ""
+        if self.translated_content:
+            return f"[{time_str}] {self.plugin_name}: {prefix}{self.content}\n    [译] {self.translated_content}"
         return f"[{time_str}] {self.plugin_name}: {prefix}{self.content}"
 
 
@@ -45,6 +50,7 @@ class Monitor(QObject):
         super().__init__()
         self.ocr_engine: Optional[BaseOCREngine] = None
         self.plugin: Optional[Plugin] = None
+        self.translator: Translator = Translator()
         self.interval: int = 2000  # milliseconds (default 2 seconds)
         self.region: Optional[tuple] = None  # (x, y, width, height)
 
@@ -161,11 +167,18 @@ class Monitor(QObject):
     def _add_history_entry(self, content: str, is_change: bool = False):
         """Add an entry to the history."""
         plugin_name = self.plugin.name if self.plugin else "Default"
+
+        # Translate content if translation is enabled
+        translated_content = None
+        if self.translator.enabled:
+            translated_content = self.translator.translate(content)
+
         entry = HistoryEntry(
             timestamp=datetime.now(),
             plugin_name=plugin_name,
             content=content,
-            is_change=is_change
+            is_change=is_change,
+            translated_content=translated_content
         )
 
         self._history.append(entry)

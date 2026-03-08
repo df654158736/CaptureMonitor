@@ -75,6 +75,7 @@ def main():
     main_window.ocr_changed.connect(monitor.set_ocr_engine)
     main_window.plugin_changed.connect(monitor.set_plugin)
     main_window.interval_changed.connect(monitor.set_interval)
+    main_window.translation_changed.connect(monitor.translator.set_enabled)
 
     # Set initial values after connecting signals (signals emitted during __init__ were missed)
     if main_window.current_ocr:

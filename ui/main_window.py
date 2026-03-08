@@ -5,7 +5,7 @@ Main control window for the CaptureMonitor application.
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QPushButton, QComboBox, QSpinBox,
-    QMessageBox, QGroupBox
+    QMessageBox, QGroupBox, QCheckBox
 )
 from PyQt6.QtCore import Qt, pyqtSignal
 from typing import List, Optional
@@ -34,6 +34,7 @@ class MainWindow(QMainWindow):
     ocr_changed = pyqtSignal(object)  # BaseOCREngine
     plugin_changed = pyqtSignal(object)  # Optional[Plugin]
     interval_changed = pyqtSignal(float)  # seconds
+    translation_changed = pyqtSignal(bool)  # enabled
 
     def __init__(self):
         super().__init__()
@@ -90,6 +91,21 @@ class MainWindow(QMainWindow):
         interval_layout.addWidget(self.interval_spin)
 
         layout.addWidget(interval_group)
+
+        # Translation Setting
+        translation_group = QGroupBox("翻译设置")
+        translation_layout = QVBoxLayout(translation_group)
+
+        self.translate_checkbox = QCheckBox("启用翻译 (中文化)")
+        self.translate_checkbox.setChecked(False)
+        self.translate_checkbox.stateChanged.connect(self._on_translation_changed)
+        translation_layout.addWidget(self.translate_checkbox)
+
+        self.translate_status = QLabel("需要安装: pip install googletrans-py")
+        self.translate_status.setStyleSheet("color: gray; font-size: 11px;")
+        translation_layout.addWidget(self.translate_status)
+
+        layout.addWidget(translation_group)
 
         # Control Buttons
         control_group = QGroupBox("\u63a7\u5236")
@@ -186,6 +202,17 @@ class MainWindow(QMainWindow):
         """Handle interval change."""
         seconds = self.interval_spin.value()
         self.interval_changed.emit(float(seconds))
+
+    def _on_translation_changed(self, state):
+        """Handle translation checkbox change."""
+        enabled = state == Qt.CheckState.Checked.value
+        self.translation_changed.emit(enabled)
+        if enabled:
+            self.translate_status.setText("翻译已启用")
+            self.translate_status.setStyleSheet("color: green; font-size: 11px;")
+        else:
+            self.translate_status.setText("翻译已禁用")
+            self.translate_status.setStyleSheet("color: gray; font-size: 11px;")
 
     def _on_overlay_toggled(self, checked: bool):
         """Handle overlay toggle."""
