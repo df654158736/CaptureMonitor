@@ -24,8 +24,7 @@ class PaddleOCREngine(BaseOCREngine):
                 from paddleocr import PaddleOCR
                 self._ocr = PaddleOCR(
                     use_angle_cls=True,
-                    lang='ch',
-                    show_log=False
+                    lang='ch'
                 )
                 self._initialized = True
             except Exception as e:

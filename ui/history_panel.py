@@ -91,7 +91,7 @@ class HistoryPanel(QWidget):
         cursor.movePosition(QTextCursor.MoveOperation.End)
 
         # Add newline if not first entry
-        if not self.text_edit.toPlainText().isEmpty():
+        if self.text_edit.toPlainText():
             cursor.insertText('\n')
 
         cursor.insertText(text, format)
@@ -121,7 +121,7 @@ class HistoryPanel(QWidget):
             cursor = self.text_edit.textCursor()
             cursor.movePosition(QTextCursor.MoveOperation.End)
 
-            if not self.text_edit.toPlainText().isEmpty():
+            if self.text_edit.toPlainText():
                 cursor.insertText('\n')
 
             cursor.insertText(text, format)
