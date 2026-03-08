@@ -24,7 +24,7 @@ class OverlayWindow(QWidget):
         super().__init__()
 
         # Window properties
-        self.setWindowTitle("Select Region")
+        self.setWindowTitle("\u9009\u62e9\u76d1\u63a7\u533a\u57df")
         self.setWindowFlags(
             Qt.WindowType.FramelessWindowHint |
             Qt.WindowType.WindowStaysOnTopHint |
@@ -95,6 +95,8 @@ class OverlayWindow(QWidget):
                     self._selection.height()
                 )
                 logger.info(f"Region selected: {self._selection}")
+                # Hide overlay after selection
+                self.hide()
 
             self.update()
 
@@ -102,6 +104,7 @@ class OverlayWindow(QWidget):
         """Handle key press - escape to close."""
         if event.key() == Qt.Key.Key_Escape:
             self.hide()
+            self.clear_selection()
 
     def paintEvent(self, event: QPaintEvent):
         """Paint the overlay and selection."""

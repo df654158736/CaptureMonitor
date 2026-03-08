@@ -35,7 +35,7 @@ class MainWindow(QMainWindow):
 
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("CaptureMonitor")
+        self.setWindowTitle("\u5c4f\u5e55\u6587\u5b57\u76d1\u63a7\u5de5\u5177")
         self.setMinimumSize(400, 300)
 
         self.plugins: List[Plugin] = []
@@ -54,11 +54,11 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(20, 20, 20, 20)
 
         # OCR Engine Selection
-        ocr_group = QGroupBox("OCR Engine")
+        ocr_group = QGroupBox("OCR \u5f15\u64ce")
         ocr_layout = QVBoxLayout(ocr_group)
 
         self.ocr_combo = QComboBox()
-        self.ocr_combo.addItem("PaddleOCR (Recommended)", "paddle")
+        self.ocr_combo.addItem("PaddleOCR (\u63a8\u8350)", "paddle")
         self.ocr_combo.addItem("Windows OCR", "windows")
         self.ocr_combo.currentIndexChanged.connect(self._on_ocr_changed)
         ocr_layout.addWidget(self.ocr_combo)
@@ -66,7 +66,7 @@ class MainWindow(QMainWindow):
         layout.addWidget(ocr_group)
 
         # Plugin Selection
-        plugin_group = QGroupBox("Plugin")
+        plugin_group = QGroupBox("\u63d2\u4ef6")
         plugin_layout = QVBoxLayout(plugin_group)
 
         self.plugin_combo = QComboBox()
@@ -76,24 +76,24 @@ class MainWindow(QMainWindow):
         layout.addWidget(plugin_group)
 
         # Interval Setting
-        interval_group = QGroupBox("Monitoring Interval")
+        interval_group = QGroupBox("\u76d1\u63a7\u95f4\u9694")
         interval_layout = QHBoxLayout(interval_group)
 
         self.interval_spin = QSpinBox()
         self.interval_spin.setRange(1, 60)
         self.interval_spin.setValue(2)
-        self.interval_spin.setSuffix(" seconds")
+        self.interval_spin.setSuffix(" \u79d2")
         self.interval_spin.valueChanged.connect(self._on_interval_changed)
         interval_layout.addWidget(self.interval_spin)
 
         layout.addWidget(interval_group)
 
         # Control Buttons
-        control_group = QGroupBox("Controls")
+        control_group = QGroupBox("\u63a7\u5236")
         control_layout = QVBoxLayout(control_group)
 
         # Overlay button
-        self.overlay_btn = QPushButton("Show Monitor Frame")
+        self.overlay_btn = QPushButton("\u663e\u793a\u76d1\u63a7\u6846\u67b6")
         self.overlay_btn.setCheckable(True)
         self.overlay_btn.toggled.connect(self._on_overlay_toggled)
         control_layout.addWidget(self.overlay_btn)
@@ -101,11 +101,11 @@ class MainWindow(QMainWindow):
         # Start/Stop buttons
         btn_layout = QHBoxLayout()
 
-        self.start_btn = QPushButton("Start Monitoring")
+        self.start_btn = QPushButton("\u5f00\u59cb\u76d1\u63a7")
         self.start_btn.clicked.connect(self._on_start_clicked)
         btn_layout.addWidget(self.start_btn)
 
-        self.stop_btn = QPushButton("Stop Monitoring")
+        self.stop_btn = QPushButton("\u505c\u6b62\u76d1\u63a7")
         self.stop_btn.clicked.connect(self._on_stop_clicked)
         self.stop_btn.setEnabled(False)
         btn_layout.addWidget(self.stop_btn)
@@ -113,14 +113,14 @@ class MainWindow(QMainWindow):
         control_layout.addLayout(btn_layout)
 
         # Clear history button
-        self.clear_btn = QPushButton("Clear History")
+        self.clear_btn = QPushButton("\u6e05\u7a7a\u5386\u53f2")
         self.clear_btn.clicked.connect(self._on_clear_clicked)
         control_layout.addWidget(self.clear_btn)
 
         layout.addWidget(control_group)
 
         # Status
-        self.status_label = QLabel("Ready - Select a region to monitor")
+        self.status_label = QLabel("\u5c31\u7eea - \u8bf7\u9009\u62e9\u76d1\u63a7\u533a\u57df")
         self.status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.status_label.setStyleSheet("color: gray;")
         layout.addWidget(self.status_label)
@@ -135,7 +135,7 @@ class MainWindow(QMainWindow):
         """Set the available plugins."""
         self.plugins = plugins
         self.plugin_combo.clear()
-        self.plugin_combo.addItem("None (Default)", None)
+        self.plugin_combo.addItem("\u65e0 (\u9ed8\u8ba4)", None)
 
         for plugin in plugins:
             self.plugin_combo.addItem(f"{plugin.name} - {plugin.description}", plugin)
@@ -153,9 +153,8 @@ class MainWindow(QMainWindow):
             if self.current_ocr and not self.current_ocr.is_available:
                 QMessageBox.warning(
                     self,
-                    "OCR Engine Unavailable",
-                    f"{self.current_ocr.name} is not available. "
-                    "Please check your installation."
+                    "OCR\u5f15\u64ce\u4e0d\u53ef\u7528",
+                    f"{self.current_ocr.name} \u4e0d\u53ef\u7528\u3002\n\u8bf7\u68c0\u67e5\u60a8\u7684\u5b89\u88c5\u3002"
                 )
             else:
                 self.ocr_changed.emit(self.current_ocr)
@@ -164,8 +163,8 @@ class MainWindow(QMainWindow):
             logger.error(f"Error initializing OCR engine: {e}")
             QMessageBox.critical(
                 self,
-                "OCR Error",
-                f"Failed to initialize OCR engine:\n{str(e)}"
+                "OCR\u9519\u8bef",
+                f"\u521d\u59cb\u5316OCR\u5f15\u64ce\u5931\u8d25:\n{str(e)}"
             )
 
     def _on_plugin_changed(self):
@@ -181,10 +180,10 @@ class MainWindow(QMainWindow):
     def _on_overlay_toggled(self, checked: bool):
         """Handle overlay toggle."""
         if checked:
-            self.overlay_btn.setText("Hide Monitor Frame")
+            self.overlay_btn.setText("\u9690\u85cf\u76d1\u63a7\u6846\u67b6")
             self.show_overlay_requested.emit()
         else:
-            self.overlay_btn.setText("Show Monitor Frame")
+            self.overlay_btn.setText("\u663e\u793a\u76d1\u63a7\u6846\u67b6")
             self.hide_overlay_requested.emit()
 
     def _on_start_clicked(self):
@@ -192,7 +191,7 @@ class MainWindow(QMainWindow):
         self.start_monitoring_requested.emit()
         self.start_btn.setEnabled(False)
         self.stop_btn.setEnabled(True)
-        self.status_label.setText("Monitoring active...")
+        self.status_label.setText("\u76d1\u63a7\u4e2d...")
         self.status_label.setStyleSheet("color: green;")
 
     def _on_stop_clicked(self):
@@ -200,7 +199,7 @@ class MainWindow(QMainWindow):
         self.stop_monitoring_requested.emit()
         self.start_btn.setEnabled(True)
         self.stop_btn.setEnabled(False)
-        self.status_label.setText("Monitoring stopped")
+        self.status_label.setText("\u76d1\u63a7\u5df2\u505c\u6b62")
         self.status_label.setStyleSheet("color: gray;")
 
     def _on_clear_clicked(self):

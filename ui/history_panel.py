@@ -25,7 +25,7 @@ class HistoryPanel(QWidget):
 
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("History")
+        self.setWindowTitle("\u5386\u53f2\u8bb0\u5f55")
         self.setMinimumSize(400, 300)
 
         # Make window draggable and stay on top
@@ -44,7 +44,7 @@ class HistoryPanel(QWidget):
         layout.setContentsMargins(10, 10, 10, 10)
 
         # Title label
-        title_label = QLabel("Monitoring History")
+        title_label = QLabel("\u76d1\u63a7\u5386\u53f2")
         title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         title_label.setStyleSheet("font-weight: bold; font-size: 14px;")
         layout.addWidget(title_label)
@@ -58,18 +58,18 @@ class HistoryPanel(QWidget):
         # Buttons
         button_layout = QHBoxLayout()
 
-        self.clear_btn = QPushButton("Clear")
+        self.clear_btn = QPushButton("\u6e05\u7a7a")
         self.clear_btn.clicked.connect(self._on_clear)
         button_layout.addWidget(self.clear_btn)
 
-        self.export_btn = QPushButton("Export")
+        self.export_btn = QPushButton("\u5bfc\u51fa")
         self.export_btn.clicked.connect(self._on_export)
         button_layout.addWidget(self.export_btn)
 
         layout.addLayout(button_layout)
 
         # Status label
-        self.status_label = QLabel("0 entries")
+        self.status_label = QLabel("0 \u6761\u8bb0\u5f55")
         self.status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(self.status_label)
 
@@ -147,26 +147,26 @@ class HistoryPanel(QWidget):
         """Handle export button click."""
         filepath, _ = QFileDialog.getSaveFileName(
             self,
-            "Export History",
+            "\u5bfc\u51fa\u5386\u53f2",
             "monitor_history.txt",
-            "Text Files (*.txt);;All Files (*)"
+            "\u6587\u672c\u6587\u4ef6 (*.txt);;\u6240\u6709\u6587\u4ef6 (*)"
         )
 
         if filepath:
             try:
                 with open(filepath, 'w', encoding='utf-8') as f:
                     f.write(self.text_edit.toPlainText())
-                self.status_label.setText(f"Exported to {filepath}")
+                self.status_label.setText(f"\u5df2\u5bfc\u51fa\u5230 {filepath}")
                 logger.info(f"History exported to {filepath}")
             except Exception as e:
                 logger.error(f"Error exporting history: {e}")
-                self.status_label.setText(f"Export failed: {e}")
+                self.status_label.setText(f"\u5bfc\u51fa\u5931\u8d25: {e}")
 
     def _update_status(self):
         """Update the status label."""
         lines = self.text_edit.toPlainText().strip().split('\n')
         count = len(lines) if lines[0] else 0
-        self.status_label.setText(f"{count} entries")
+        self.status_label.setText(f"{count} \u6761\u8bb0\u5f55")
 
     def closeEvent(self, event):
         """Handle close event - just hide instead of close."""
