@@ -6,6 +6,7 @@ from PyQt6.QtCore import QObject, QTimer, pyqtSignal
 from typing import Optional, Callable, List
 from datetime import datetime
 import logging
+import difflib
 
 from core.ocr.base import BaseOCREngine
 from core.plugin_loader import Plugin
@@ -140,8 +141,9 @@ class Monitor(QObject):
             # Emit signal for real-time display (not recorded to history)
             self.text_detected.emit(processed_text)
 
-            # Check for changes and only record changes to history
-            if processed_text != self._previous_text:
+            # Check for changes using similarity threshold
+            # This avoids recording OCR instability as changes
+            if not self._is_similar(processed_text, self._previous_text):
                 if self._previous_text:  # Skip first detection
                     self._handle_change(self._previous_text, processed_text)
                 self._previous_text = processed_text
@@ -149,6 +151,28 @@ class Monitor(QObject):
         except Exception as e:
             logger.error(f"Error during monitoring tick: {e}")
             self.error_occurred.emit(str(e))
+
+    def _is_similar(self, text1: str, text2: str, threshold: float = 0.85) -> bool:
+        """
+        Check if two texts are similar enough to be considered the same.
+        Uses difflib.SequenceMatcher to calculate similarity ratio.
+
+        Args:
+            text1: First text
+            text2: Second text
+            threshold: Similarity threshold (0.0 to 1.0), default 0.85
+
+        Returns:
+            True if texts are similar enough
+        """
+        if not text1 and not text2:
+            return True
+        if not text1 or not text2:
+            return False
+
+        # Use difflib to calculate similarity
+        similarity = difflib.SequenceMatcher(None, text1, text2).ratio()
+        return similarity >= threshold
 
     def _handle_change(self, old: str, new: str):
         """Handle a detected change."""
