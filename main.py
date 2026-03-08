@@ -10,6 +10,7 @@ from PyQt6.QtCore import Qt
 from ui.main_window import MainWindow
 from ui.overlay_window import OverlayWindow
 from ui.history_panel import HistoryPanel
+from ui.region_indicator import RegionIndicator
 from core.monitor import Monitor
 from core.plugin_loader import discover_plugins
 
@@ -49,6 +50,7 @@ def main():
     main_window = MainWindow()
     overlay_window = OverlayWindow()
     history_panel = HistoryPanel()
+    region_indicator = RegionIndicator()
 
     # Load plugins
     plugins = discover_plugins()
@@ -66,6 +68,7 @@ def main():
     main_window.hide_overlay_requested.connect(overlay_window.hide)
     main_window.start_monitoring_requested.connect(monitor.start)
     main_window.stop_monitoring_requested.connect(monitor.stop)
+    main_window.stop_monitoring_requested.connect(region_indicator.hide_indicator)
     main_window.clear_history_requested.connect(monitor.clear_history)
     main_window.clear_history_requested.connect(history_panel.clear)
     main_window.ocr_changed.connect(monitor.set_ocr_engine)
@@ -74,8 +77,10 @@ def main():
 
     # Connect overlay signals
     overlay_window.region_selected.connect(monitor.set_region)
+    overlay_window.region_selected.connect(region_indicator.set_region)
+    overlay_window.region_selected.connect(region_indicator.show_indicator)
     overlay_window.region_selected.connect(
-        lambda x, y, w, h: main_window.update_status(f"Region selected: ({x}, {y}) {w}x{h}")
+        lambda x, y, w, h: main_window.update_status(f"\u5df2\u9009\u62e9\u533a\u57df: ({x}, {y}) {w}x{h}")
     )
 
     # Connect monitor signals
