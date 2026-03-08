@@ -30,6 +30,7 @@ class MainWindow(QMainWindow):
     start_monitoring_requested = pyqtSignal()
     stop_monitoring_requested = pyqtSignal()
     clear_history_requested = pyqtSignal()
+    view_history_requested = pyqtSignal()
     ocr_changed = pyqtSignal(object)  # BaseOCREngine
     plugin_changed = pyqtSignal(object)  # Optional[Plugin]
     interval_changed = pyqtSignal(float)  # seconds
@@ -114,8 +115,13 @@ class MainWindow(QMainWindow):
 
         control_layout.addLayout(btn_layout)
 
+        # View history button
+        self.view_history_btn = QPushButton("查看历史")
+        self.view_history_btn.clicked.connect(self._on_view_history_clicked)
+        control_layout.addWidget(self.view_history_btn)
+
         # Clear history button
-        self.clear_btn = QPushButton("\u6e05\u7a7a\u5386\u53f2")
+        self.clear_btn = QPushButton("清空历史")
         self.clear_btn.clicked.connect(self._on_clear_clicked)
         control_layout.addWidget(self.clear_btn)
 
@@ -210,6 +216,10 @@ class MainWindow(QMainWindow):
     def _on_clear_clicked(self):
         """Handle clear history button click."""
         self.clear_history_requested.emit()
+
+    def _on_view_history_clicked(self):
+        """Handle view history button click."""
+        self.view_history_requested.emit()
 
     def update_status(self, message: str, is_error: bool = False):
         """Update the status label."""

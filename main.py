@@ -71,16 +71,10 @@ def main():
     main_window.stop_monitoring_requested.connect(region_indicator.hide_indicator)
     main_window.clear_history_requested.connect(monitor.clear_history)
     main_window.clear_history_requested.connect(history_panel.clear)
+    main_window.view_history_requested.connect(history_panel.show)
     main_window.ocr_changed.connect(monitor.set_ocr_engine)
     main_window.plugin_changed.connect(monitor.set_plugin)
     main_window.interval_changed.connect(monitor.set_interval)
-
-    # Set initial values after connecting signals (signals emitted during __init__ were missed)
-    if main_window.current_ocr:
-        monitor.set_ocr_engine(main_window.current_ocr)
-        logger.info(f"Initial OCR engine set: {main_window.current_ocr.name}")
-    if main_window.current_plugin:
-        monitor.set_plugin(main_window.current_plugin)
 
     # Set initial values after connecting signals (signals emitted during __init__ were missed)
     if main_window.current_ocr:
@@ -112,9 +106,9 @@ def main():
     # Connect history panel signals
     history_panel.clear_requested.connect(monitor.clear_history)
 
-    # Show windows
+    # Show windows (history panel is hidden by default, shown via button)
     main_window.show()
-    history_panel.show()
+    # history_panel.show()  # Now shown via "View History" button
 
     logger.info("CaptureMonitor started successfully")
 

@@ -131,17 +131,14 @@ class Monitor(QObject):
             else:
                 processed_text = text
 
-            # Record to history
-            self._add_history_entry(processed_text)
-
-            # Emit signal
+            # Emit signal for real-time display (not recorded to history)
             self.text_detected.emit(processed_text)
 
-            # Check for changes
-            if self._previous_text and processed_text != self._previous_text:
-                self._handle_change(self._previous_text, processed_text)
-
-            self._previous_text = processed_text
+            # Check for changes and only record changes to history
+            if processed_text != self._previous_text:
+                if self._previous_text:  # Skip first detection
+                    self._handle_change(self._previous_text, processed_text)
+                self._previous_text = processed_text
 
         except Exception as e:
             logger.error(f"Error during monitoring tick: {e}")
