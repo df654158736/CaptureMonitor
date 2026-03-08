@@ -3,11 +3,16 @@ PaddleOCR engine implementation.
 """
 
 import logging
+import os
 from PIL import Image
 import numpy as np
 from .base import BaseOCREngine
 
 logger = logging.getLogger(__name__)
+
+# Disable oneDNN to avoid compatibility issues
+os.environ['FLAGS_use_mkldnn'] = '0'
+os.environ['PADDLE_DISABLE_ONE_DNN'] = '1'
 
 
 class PaddleOCREngine(BaseOCREngine):
@@ -23,8 +28,10 @@ class PaddleOCREngine(BaseOCREngine):
             try:
                 from paddleocr import PaddleOCR
                 self._ocr = PaddleOCR(
-                    use_angle_cls=True,
-                    lang='ch'
+                    use_angle_cls=False,
+                    lang='ch',
+                    use_gpu=False,
+                    enable_mkldnn=False
                 )
                 self._initialized = True
             except Exception as e:
