@@ -75,6 +75,20 @@ def main():
     main_window.plugin_changed.connect(monitor.set_plugin)
     main_window.interval_changed.connect(monitor.set_interval)
 
+    # Set initial values after connecting signals (signals emitted during __init__ were missed)
+    if main_window.current_ocr:
+        monitor.set_ocr_engine(main_window.current_ocr)
+        logger.info(f"Initial OCR engine set: {main_window.current_ocr.name}")
+    if main_window.current_plugin:
+        monitor.set_plugin(main_window.current_plugin)
+
+    # Set initial values after connecting signals (signals emitted during __init__ were missed)
+    if main_window.current_ocr:
+        monitor.set_ocr_engine(main_window.current_ocr)
+        logger.info(f"Initial OCR engine set: {main_window.current_ocr.name}")
+    if main_window.current_plugin:
+        monitor.set_plugin(main_window.current_plugin)
+
     # Connect overlay signals
     overlay_window.region_selected.connect(monitor.set_region)
     overlay_window.region_selected.connect(region_indicator.set_region)
