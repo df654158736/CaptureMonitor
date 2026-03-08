@@ -45,7 +45,7 @@ class PaddleOCREngine(BaseOCREngine):
             self._initialize()
             # Convert PIL Image to numpy array
             img_array = np.array(image)
-            result = self._ocr.ocr(img_array, cls=True)
+            result = self._ocr.ocr(img_array)
 
             if result and result[0]:
                 texts = [line[1][0] for line in result[0]]
