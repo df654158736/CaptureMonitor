@@ -5,17 +5,13 @@ echo CaptureMonitor 依赖安装脚本
 echo ==========================================
 echo.
 
-echo [1/3] 安装 Tesseract OCR...
-pip install pytesseract pillow
+echo [1/2] 安装 PaddleOCR...
+pip install paddleocr paddlepaddle
 
 echo.
-echo [2/3] 安装翻译库...
-pip install googletrans-py
-
-echo.
-echo [3/3] 安装 PaddleOCR（可选）...
-echo 如果您需要使用 PaddleOCR，请运行：
-echo    pip install paddleocr
+echo [2/2] 安装翻译库（可选）...
+echo 如果需要使用翻译功能，请运行：
+echo    pip install googletrans-py
 
 echo.
 echo ==========================================

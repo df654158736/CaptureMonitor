@@ -14,7 +14,6 @@ import logging
 from core.ocr.base import BaseOCREngine
 from core.ocr.paddle_ocr import PaddleOCREngine
 from core.ocr.windows_ocr import WindowsOCREngine
-from core.ocr.tesseract_ocr import TesseractOCREngine
 from core.plugin_loader import Plugin
 from core.monitor import Monitor
 
@@ -61,8 +60,7 @@ class MainWindow(QMainWindow):
         ocr_layout = QVBoxLayout(ocr_group)
 
         self.ocr_combo = QComboBox()
-        self.ocr_combo.addItem("Tesseract OCR (推荐)", "tesseract")
-        self.ocr_combo.addItem("PaddleOCR (实验性)", "paddle")
+        self.ocr_combo.addItem("PaddleOCR (推荐)", "paddle")
         self.ocr_combo.addItem("Windows OCR", "windows")
         self.ocr_combo.currentIndexChanged.connect(self._on_ocr_changed)
         ocr_layout.addWidget(self.ocr_combo)
@@ -171,8 +169,6 @@ class MainWindow(QMainWindow):
         try:
             if ocr_type == "paddle":
                 self.current_ocr = PaddleOCREngine()
-            elif ocr_type == "tesseract":
-                self.current_ocr = TesseractOCREngine()
             elif ocr_type == "windows":
                 self.current_ocr = WindowsOCREngine()
 

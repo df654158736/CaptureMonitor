@@ -92,6 +92,12 @@ def main():
         lambda x, y, w, h: main_window.update_status(f"\u5df2\u9009\u62e9\u533a\u57df: ({x}, {y}) {w}x{h}")
     )
 
+    # Connect region indicator drag signal
+    region_indicator.region_moved.connect(monitor.set_region)
+    region_indicator.region_moved.connect(
+        lambda x, y, w, h: main_window.update_status(f"\u533a\u57df\u5df2\u79fb\u52a8: ({x}, {y}) {w}x{h}")
+    )
+
     # Connect monitor signals
     monitor.text_detected.connect(lambda text: logger.debug(f"Detected: {text}"))
     monitor.change_detected.connect(

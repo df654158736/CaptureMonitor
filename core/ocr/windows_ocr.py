@@ -3,7 +3,6 @@ Windows OCR engine implementation using Windows.Media.Ocr.
 """
 
 import logging
-import ctypes
 from PIL import Image
 from .base import BaseOCREngine
 
@@ -25,9 +24,8 @@ class WindowsOCREngine(BaseOCREngine):
             import winrt.windows.graphics.imaging as imaging
             return True
         except ImportError:
-            # Fallback: try using ctypes to call Windows API directly
+            # Fallback: check if we're on Windows
             try:
-                # Check if we're on Windows
                 import platform
                 if platform.system() == "Windows":
                     return True
@@ -46,7 +44,7 @@ class WindowsOCREngine(BaseOCREngine):
             Recognized text as a string
         """
         try:
-            # Try winrt approach first
+            # Try winrt approach
             try:
                 import winrt.windows.media.ocr as ocr
                 import winrt.windows.storage.streams as streams
@@ -70,13 +68,9 @@ class WindowsOCREngine(BaseOCREngine):
             except ImportError:
                 pass
 
-            # Fallback: use pytesseract if available, otherwise return empty
-            try:
-                import pytesseract
-                return pytesseract.image_to_string(image, lang='chi_sim+eng')
-            except ImportError:
-                logger.warning("Windows OCR not fully implemented, pytesseract not available")
-                return ""
+            # Windows OCR is not fully implemented
+            logger.warning("Windows OCR not fully implemented, returning empty")
+            return ""
 
         except Exception as e:
             logger.error(f"Windows OCR recognition failed: {e}")
