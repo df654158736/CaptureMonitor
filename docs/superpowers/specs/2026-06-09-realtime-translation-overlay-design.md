@@ -20,10 +20,20 @@
 | 场景 | 游戏文本 / 对话框 |
 | 语言方向 | 英 → 中(可配置) |
 | 触发 | **自动图像变化检测 + 全局热键** |
-| 显示 | **独立可拖动悬浮框**(默认仅译文,可切原文+译文) |
+| 采集 | **直接拖动 / 缩放的「采集框」**(取消全屏拉框选区步骤) |
+| 显示 | **译文框默认自动吸附在采集框正下方并跟随**(可拖离独立摆放;默认仅译文,可切原文+译文) |
 | 插件系统 | 移除(YAGNI;保留 backend 抽象以便扩展) |
 | 全局热键 | `keyboard` 库 |
 | 历史 | 保留轻量「译文回看」面板 |
+
+### 操作流程
+
+1. 启动后出现一个可拖动、可缩放的**采集框**;把它罩在游戏对话文字上(取代旧的「全屏拉框选区」)。
+2. **译文框**默认自动吸附在采集框正下方并跟随移动 —— 摆好采集框,译文即出现在其下方;译文框可单独拖离、缩放、调透明度,放到任意位置(旁边 / 屏幕角落 / 第二屏)。
+3. 「开始」后采集框切到**锁定态**:细边框 + 鼠标穿透(不挡点击游戏),仅标示采集区域。
+4. 检测到对话变化(或按热键)→ 译文框刷新。
+
+**为什么译文不盖在采集框上**:若译文覆盖被采集区域,下一次截图会把译文自身拍入 → 形成反馈环、识别错乱。故译文必须落在采集区域之外。原位 AR 叠加(用 `WDA_EXCLUDEFROMCAPTURE` 把译文窗口排除出截图)留作未来增强,可靠性因游戏 / 截图方式而异。
 
 ## 2. 设计原则
 
@@ -58,7 +68,7 @@ QThread(后台,不阻塞 UI)
 
 #### `core/config.py`
 - **职责**:读写本地 `config.json`,设置持久化。
-- **内容**:百度 `appid`/`secret`、语言对、选区 `(x,y,w,h)`、触发模式、热键、悬浮框几何与透明度、采样间隔、防抖时长、变化阈值。
+- **内容**:百度 `appid`/`secret`、语言对、采集框几何 `(x,y,w,h)`、触发模式、热键、译文框几何 / 透明度 / dock 状态、采样间隔、防抖时长、变化阈值。
 - **接口**:`load() -> Config`、`save(cfg)`;字段有默认值,缺失字段容错。
 - **依赖**:标准库 `json`。`config.json` 加入 `.gitignore`。
 
@@ -111,10 +121,11 @@ QThread(后台,不阻塞 UI)
 - **职责**:无边框 / 置顶 / 半透明 / 可拖动 / 可缩放的译文悬浮框。
 - **要点**:
   - `FramelessWindowHint | WindowStaysOnTopHint | Tool`,半透明背景。
+  - **默认 dock 在采集框正下方并跟随采集框移动 / 缩放**;用户拖动它即切为 `detached`(独立)模式,从此自由摆放、不再跟随。
   - 自定义拖动(顶部把手区域 mousePress/Move);右下角 resize grip。
   - 默认仅显示译文,字体随框尺寸自适应;可切「原文 + 译文」双行核对。
   - 顶部细工具条:拖动 / 透明度滑块 / 显隐原文 / 关闭。
-  - 位置 / 大小 / 透明度写入 config,下次启动还原。
+  - 位置 / 大小 / 透明度 / dock 状态写入 config,下次启动还原。
 - **依赖**:PyQt6、`config`。
 
 ### 改造
@@ -124,12 +135,18 @@ QThread(后台,不阻塞 UI)
 - **修 DPI**:选区坐标是 Qt 逻辑坐标,截图需物理像素;用 `devicePixelRatio` 换算,避免缩放(125%/150%)下截错区域 / 糊图。
 - 接口:`capture_region(x, y, w, h) -> PIL.Image`(物理像素)。
 
-#### `ui/overlay_window.py`(选区器)
-- 同样修 DPI 坐标转换,使 `region_selected` 发出的坐标与实际截图像素一致。
+#### `ui/capture_box.py`(采集框,新增;取代旧的全屏选区 + RegionIndicator)
+- **职责**:直接拖动 / 缩放的采集框,其几何即采集区域。取代「全屏拉框选区」流程,也取代独立的监控区域指示器。
+- **两态**:
+  - 调整态:interior 捕获鼠标,可整体拖动、边角缩放,显示坐标/尺寸。
+  - 锁定态(「开始」后):细边框 + 鼠标穿透(`WA_TransparentForMouseEvents`),不挡点击游戏,仅标示采集区域。
+- 几何变更时:① 经 `config` 持久化;② 通知 worker 更新采集区域;③ 通知译文框跟随(若 dock 模式)。
+- **修 DPI**:几何 → 物理像素换算,确保采集像素与显示一致。
+- **依赖**:PyQt6、`config`。
 
 #### `ui/main_window.py`(控制面板)
 - **去掉** OCR 引擎下拉。
-- 新增:百度 `appid`/`secret` 输入(持久化)、语言对(默认 EN→ZH)、触发模式(自动/热键/两者)、热键绑定、灵敏度/防抖(进阶,可折叠)、显示/隐藏译文框、开始/停止、查看历史。
+- 新增:百度 `appid`/`secret` 输入(持久化)、语言对(默认 EN→ZH)、触发模式(自动/热键/两者)、热键绑定、灵敏度/防抖(进阶,可折叠)、显示/隐藏采集框、调整↔锁定切换、显示/隐藏译文框、开始/停止、查看历史。
 - 首次无密钥引导填写。
 
 #### `ui/history_panel.py`
@@ -141,6 +158,7 @@ QThread(后台,不阻塞 UI)
 - `core/translator.py`(googletrans / 旧 Baidu 文本)。
 - `core/monitor.py`(变化监控逻辑由 `worker.py` 取代)。
 - `plugins/`、`core/plugin_loader.py`(插件系统,YAGNI)。
+- `ui/overlay_window.py`(全屏选区,改为 `capture_box.py`)、`ui/region_indicator.py`(并入 `capture_box.py`)。
 - `install_tesseract.py` / `install_tesseract.bat`(本地 OCR 安装助手)。
 - `requirements.txt`:移除 `paddleocr` / `paddlepaddle` / `pyautogui` / `pywin32`(如不再需要);新增 `mss` / `requests` / `numpy` / `keyboard`;保留 `PyQt6` / `Pillow`。
 
@@ -150,10 +168,10 @@ QThread(后台,不阻塞 UI)
 {
   "baidu": { "appid": "", "secret": "" },
   "lang": { "from": "en", "to": "zh" },
-  "region": [0, 0, 0, 0],
+  "capture": { "x": 0, "y": 0, "w": 0, "h": 0 },
   "trigger": { "mode": "auto+hotkey", "hotkey": "alt+d" },
   "detection": { "sample_interval_ms": 120, "stability_ms": 400, "change_threshold": 8 },
-  "overlay": { "x": 100, "y": 100, "w": 480, "h": 160, "opacity": 0.85, "show_source": false }
+  "overlay": { "dock": "below", "detached": false, "x": 100, "y": 100, "w": 480, "h": 160, "opacity": 0.85, "show_source": false }
 }
 ```
 
