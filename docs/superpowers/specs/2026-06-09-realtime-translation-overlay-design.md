@@ -9,16 +9,16 @@
 
 项目最初是一个「屏幕区域文字变化监控器」:固定 2 秒轮询截图 → 本地 OCR(Tesseract/Paddle)→ `difflib` 比较前后文本 → 把变化写入历史。翻译功能(googletrans)是后期附加,且只挂在「写历史」这一步,实时显示路径根本不翻译。
 
-新目标是一个 **可自定义位置的实时翻译悬浮框**,用于翻译 **游戏文本/对话框(英 → 中)**,要求 **快** 且 **准**。明确放弃本地 OCR(慢、依赖电脑配置),改用 **百度图片翻译合一 API**(一次网络往返完成 OCR + 翻译)。
+新目标是一个 **可自定义位置的实时翻译悬浮框**,用于翻译 **游戏文本/对话框(英 → 中)**,要求 **快** 且 **准**。明确放弃本地 OCR(慢、依赖电脑配置),改用 **有道图片翻译合一 API(`ocrtransapi`)**(一次网络往返完成 OCR + 翻译)。
 
 ### 已确认的关键决策
 
 | 维度 | 选择 |
 |---|---|
-| 在线服务 | 百度 AI 开放平台(翻译开放平台 · 图片翻译 API) |
-| 管线 | OCR + 翻译 **合一**(图片翻译 API,单次往返) |
+| 在线服务 | 有道智云(图片翻译 `ocrtransapi`;账号另开通了文本翻译 NMT 作备用) |
+| 管线 | OCR + 翻译 **合一**(`ocrtransapi` 图片翻译,单次往返) |
 | 场景 | 游戏文本 / 对话框 |
-| 语言方向 | 英 → 中(可配置) |
+| 语言方向 | 英(`en`)→ 中(`zh-CHS`),可配置 |
 | 触发 | **自动图像变化检测 + 全局热键** |
 | 采集 | **直接拖动 / 缩放的「采集框」**(取消全屏拉框选区步骤) |
 | 显示 | **译文框默认自动吸附在采集框正下方并跟随**(可拖离独立摆放;默认仅译文,可切原文+译文) |
@@ -54,7 +54,7 @@ QThread(后台,不阻塞 UI)
                               dHash ─► Cache 命中? ─是─► 直接出译文(0 API)
                                           │ 否
                                           ▼
-                              百度图片翻译 API(from=en, to=zh)
+                              有道图片翻译 ocrtransapi(from=en, to=zh-CHS)
                                           ▼
                               存 Cache + emit translation_ready(原文, 译文)
   热键按下: 跳过变化判定,强制翻译当前帧(仍走缓存)
@@ -68,12 +68,12 @@ QThread(后台,不阻塞 UI)
 
 #### `core/config.py`
 - **职责**:读写本地 `config.json`,设置持久化。
-- **内容**:百度 `appid`/`secret`、语言对、采集框几何 `(x,y,w,h)`、触发模式、热键、译文框几何 / 透明度 / dock 状态、采样间隔、防抖时长、变化阈值。
+- **内容**:有道 `app_key`/`app_secret`、语言对、采集框几何 `(x,y,w,h)`、触发模式、热键、译文框几何 / 透明度 / dock 状态、采样间隔、防抖时长、变化阈值。
 - **接口**:`load() -> Config`、`save(cfg)`;字段有默认值,缺失字段容错。
 - **依赖**:标准库 `json`。`config.json` 加入 `.gitignore`。
 
 #### `core/backends/base.py`
-- **职责**:翻译后端抽象接口,便于将来接有道/腾讯/LLM。
+- **职责**:翻译后端抽象接口,便于将来接百度/腾讯/LLM。
 - **接口**:
   ```python
   class TranslationResult:
@@ -87,16 +87,16 @@ QThread(后台,不阻塞 UI)
   ```
 - **依赖**:无(纯接口)。
 
-#### `core/backends/baidu_image.py`
-- **职责**:百度图片翻译客户端,实现 `TranslationBackend`。
+#### `core/backends/youdao_image.py`
+- **职责**:有道图片翻译(`ocrtransapi`)客户端,实现 `TranslationBackend`。
 - **要点**:
-  - 端点:`https://fanyi-api.baidu.com/api/trans/sdk/picture`,POST multipart/form-data。
-  - 参数:`image`(二进制)、`from`、`to`、`appid`、`salt`、`cuid`、`mac`、`version=3`、`sign`。
-  - 签名:`sign = MD5(appid + MD5(image_bytes_hex) + salt + cuid + mac + 密钥)`(全小写十六进制)。
-  - 响应:`data.sumSrc`(原文)、`data.sumDst`(译文)、`data.content[]`(每段 `src/dst/rect`)。
-  - 超时(默认 5s)、失败重试 1 次、错误码 → 明确异常信息(余额/QPS/密钥)。
-- **依赖**:`requests`、`hashlib`。
-- **注意**:实现时需对照百度当前官方文档核对签名算法与响应字段(可能更新),并用一个固定测试向量锁定签名。
+  - 端点:`https://openapi.youdao.com/ocrtransapi`,POST `application/x-www-form-urlencoded`。
+  - 参数:`from`、`to`、`type=1`、`q`(图片 base64)、`appKey`、`salt`(uuid)、`sign`。
+  - 签名(**v1 老版**):`q = base64(image_bytes)`;`sign = MD5(appKey + q + salt + appSecret)`(注意:用**完整 q**,不 truncate,无 curtime/signType)。
+  - 响应:`errorCode`("0" 成功)、`resRegions[]`(每段 `context`=原文 / `tranContent`=译文 / `boundingBox`=坐标)。
+  - 超时(默认 5s)、`errorCode != 0` → 明确异常信息。
+- **依赖**:`requests`、`hashlib`、`base64`、`uuid`。
+- **注意**:OCR 接口(`ocrapi`)是 v3 SHA256+truncate+curtime,与此**不同**;本项目用的是图片翻译 `ocrtransapi` 的 v1 MD5 签名。固定测试向量锁定签名。
 
 #### `core/change_detector.py`
 - **职责**:判断选区图像是否「变化后已稳定」(防抖)。
@@ -146,7 +146,7 @@ QThread(后台,不阻塞 UI)
 
 #### `ui/main_window.py`(控制面板)
 - **去掉** OCR 引擎下拉。
-- 新增:百度 `appid`/`secret` 输入(持久化)、语言对(默认 EN→ZH)、触发模式(自动/热键/两者)、热键绑定、灵敏度/防抖(进阶,可折叠)、显示/隐藏采集框、调整↔锁定切换、显示/隐藏译文框、开始/停止、查看历史。
+- 新增:有道 `app_key`/`app_secret` 输入(持久化)、语言对(默认 EN→ZH-CHS)、触发模式(自动/热键/两者)、热键绑定、灵敏度/防抖(进阶,可折叠)、显示/隐藏采集框、调整↔锁定切换、显示/隐藏译文框、开始/停止、查看历史。
 - 首次无密钥引导填写。
 
 #### `ui/history_panel.py`
@@ -166,8 +166,8 @@ QThread(后台,不阻塞 UI)
 
 ```json
 {
-  "baidu": { "appid": "", "secret": "" },
-  "lang": { "from": "en", "to": "zh" },
+  "youdao": { "app_key": "", "app_secret": "" },
+  "lang": { "from": "en", "to": "zh-CHS" },
   "capture": { "x": 0, "y": 0, "w": 0, "h": 0 },
   "trigger": { "mode": "auto+hotkey", "hotkey": "alt+d" },
   "detection": { "sample_interval_ms": 120, "stability_ms": 400, "change_threshold": 8 },
@@ -192,13 +192,13 @@ QThread(后台,不阻塞 UI)
 - 先写测试(纯逻辑模块):
   - `change_detector`:构造两张图,断言 NO_CHANGE / CHANGING / STABLE_CHANGED 时序与防抖。
   - `cache`:LRU 淘汰、命中 / 未命中、哈希键。
-  - `baidu_image`:用固定输入锁定签名算法;mock HTTP 验证响应解析与错误码处理。
+  - `youdao_image`:用固定输入锁定 v1 MD5 签名;mock HTTP 验证响应解析与错误码处理。
   - `config`:load/save 往返、缺字段默认值容错。
 - worker(线程 + Qt)、UI:以假后端 + 假截图做集成 / 冒烟测试,核心交互手动验证。
 
 ## 9. 风险与待核实
 
-- **百度图片翻译 API 契约**:签名算法与响应字段需对照官方当前文档核对,并用测试向量锁定。
+- **有道图片翻译 API 契约**:`ocrtransapi` 用 v1 MD5 签名(`MD5(appKey+q+salt+appSecret)`,q 不截断),与 OCR 接口的 v3 不同;响应字段 `resRegions[].context/tranContent/boundingBox`。用测试向量锁定签名。
 - **QPS / 配额**:免费额度与并发限制;失败需对用户给明确提示。
 - **全局热键**:`keyboard` 在游戏全屏独占(exclusive fullscreen)下可能收不到键;窗口化 / 无边框窗口模式正常。必要时回退到 Win32 `RegisterHotKey`。
 - **小字体识别**:部分游戏字体小 / 花哨,合一 API 也可能识别不全;放大预处理为可选缓解项。
@@ -206,5 +206,5 @@ QThread(后台,不阻塞 UI)
 ## 10. 非目标(本期不做)
 
 - 原位 AR 译文叠加(用 rect 覆盖原文)—— 留作未来增强,`segments` 已预留数据。
-- 多后端切换 UI(接口已抽象,实现仅百度)。
-- 多语言双向切换 UI(配置可改,UI 先做 EN→ZH)。
+- 多后端切换 UI(接口已抽象,实现仅有道)。
+- 多语言双向切换 UI(配置可改,UI 先做 EN→ZH-CHS)。
