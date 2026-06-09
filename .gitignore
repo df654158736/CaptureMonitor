@@ -45,3 +45,5 @@ dist/
 
 # Local config
 config.local.json
+config.json
+.venv/
