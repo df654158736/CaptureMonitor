@@ -5,7 +5,7 @@
 import logging
 
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel, QSizeGrip
-from PyQt6.QtCore import Qt, QPoint, pyqtSignal
+from PyQt6.QtCore import Qt, pyqtSignal
 
 logger = logging.getLogger(__name__)
 
