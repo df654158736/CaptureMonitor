@@ -1,119 +1,139 @@
-"""
-Main entry point for the CaptureMonitor application.
-"""
+"""实时翻译悬浮框 — 程序入口。"""
 
+import os
 import sys
 import logging
+
 from PyQt6.QtWidgets import QApplication
 from PyQt6.QtCore import Qt
 
+from core.config import load_config, save_config
+from core.backends.youdao_image import YoudaoImageTranslate
+from core.change_detector import ChangeDetector
+from core.cache import LRUCache
+from core.pipeline import TranslationPipeline
+from core.worker import TranslationWorker
+from core.hotkey import HotkeyManager
 from ui.main_window import MainWindow
-from ui.overlay_window import OverlayWindow
+from ui.capture_box import CaptureBox
+from ui.translation_overlay import TranslationOverlay
 from ui.history_panel import HistoryPanel
-from ui.region_indicator import RegionIndicator
-from core.monitor import Monitor
-from core.plugin_loader import discover_plugins
+
+CONFIG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json")
 
 
 def setup_logging():
-    """Setup logging configuration."""
     logging.basicConfig(
         level=logging.INFO,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        handlers=[
-            logging.StreamHandler(sys.stdout)
-        ]
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        handlers=[logging.StreamHandler(sys.stdout)],
     )
 
 
 def main():
-    """Main entry point."""
     setup_logging()
     logger = logging.getLogger(__name__)
+    config = load_config(CONFIG_PATH)
 
-    logger.info("Starting CaptureMonitor...")
-
-    # Enable high DPI scaling
     QApplication.setHighDpiScaleFactorRoundingPolicy(
         Qt.HighDpiScaleFactorRoundingPolicy.PassThrough
     )
-
-    # Create application
     app = QApplication(sys.argv)
-    app.setApplicationName("CaptureMonitor")
-    app.setApplicationVersion("1.0.0")
+    app.setApplicationName("RealtimeTranslate")
 
-    # Create monitor core
-    monitor = Monitor()
-
-    # Create UI windows
-    main_window = MainWindow()
-    overlay_window = OverlayWindow()
-    history_panel = HistoryPanel()
-    region_indicator = RegionIndicator()
-
-    # Load plugins
-    plugins = discover_plugins()
-    main_window.set_plugins(plugins)
-
-    if plugins:
-        logger.info(f"Loaded {len(plugins)} plugins: {[p.name for p in plugins]}")
-        # Set first plugin as default
-        main_window.plugin_combo.setCurrentIndex(1)
-    else:
-        logger.info("No plugins found")
-
-    # Connect main window signals
-    main_window.show_overlay_requested.connect(overlay_window.show)
-    main_window.hide_overlay_requested.connect(overlay_window.hide)
-    main_window.start_monitoring_requested.connect(monitor.start)
-    main_window.stop_monitoring_requested.connect(monitor.stop)
-    main_window.stop_monitoring_requested.connect(region_indicator.hide_indicator)
-    main_window.clear_history_requested.connect(monitor.clear_history)
-    main_window.clear_history_requested.connect(history_panel.clear)
-    main_window.view_history_requested.connect(history_panel.show)
-    main_window.ocr_changed.connect(monitor.set_ocr_engine)
-    main_window.plugin_changed.connect(monitor.set_plugin)
-    main_window.interval_changed.connect(monitor.set_interval)
-    main_window.translation_changed.connect(monitor.translator.set_enabled)
-
-    # Set initial values after connecting signals (signals emitted during __init__ were missed)
-    if main_window.current_ocr:
-        monitor.set_ocr_engine(main_window.current_ocr)
-        logger.info(f"Initial OCR engine set: {main_window.current_ocr.name}")
-    if main_window.current_plugin:
-        monitor.set_plugin(main_window.current_plugin)
-
-    # Connect overlay signals
-    overlay_window.region_selected.connect(monitor.set_region)
-    overlay_window.region_selected.connect(region_indicator.set_region)
-    overlay_window.region_selected.connect(region_indicator.show_indicator)
-    overlay_window.region_selected.connect(
-        lambda x, y, w, h: main_window.update_status(f"\u5df2\u9009\u62e9\u533a\u57df: ({x}, {y}) {w}x{h}")
+    # 后端 + 管线
+    backend = YoudaoImageTranslate(config["youdao"]["app_key"], config["youdao"]["app_secret"])
+    detector = ChangeDetector(
+        change_threshold=config["detection"]["change_threshold"],
+        stability_ms=config["detection"]["stability_ms"],
+    )
+    pipeline = TranslationPipeline(
+        backend, detector=detector, cache=LRUCache(),
+        src=config["lang"]["from"], dst=config["lang"]["to"],
     )
 
-    # Connect monitor signals
-    monitor.text_detected.connect(lambda text: logger.debug(f"Detected: {text}"))
-    monitor.change_detected.connect(
-        lambda old, new: logger.info(f"Change: {old} -> {new}")
-    )
-    monitor.history_updated.connect(
-        lambda: history_panel.set_history(monitor.get_history())
-    )
-    monitor.error_occurred.connect(
-        lambda msg: main_window.update_status(f"Error: {msg}", is_error=True)
+    # UI
+    main_window = MainWindow(config)
+    capture_box = CaptureBox(config)
+    overlay = TranslationOverlay(config)
+    history = HistoryPanel()
+
+    # Worker
+    worker = TranslationWorker(
+        pipeline,
+        get_region=lambda: (config["capture"]["x"], config["capture"]["y"],
+                            config["capture"]["w"], config["capture"]["h"]),
+        get_scale=capture_box.current_scale,
+        sample_interval_ms=config["detection"]["sample_interval_ms"],
     )
 
-    # Connect history panel signals
-    history_panel.clear_requested.connect(monitor.clear_history)
+    # 热键
+    hotkeys = HotkeyManager()
+    hotkeys.register(config["trigger"]["hotkey"], worker.request_force)
 
-    # Show windows (history panel is hidden by default, shown via button)
+    # ---- 接线 ----
+    def on_creds(app_key, app_secret):
+        config["youdao"]["app_key"] = app_key
+        config["youdao"]["app_secret"] = app_secret
+        backend.app_key, backend.app_secret = app_key, app_secret
+        save_config(CONFIG_PATH, config)
+
+    def on_lang(src, dst):
+        config["lang"]["from"], config["lang"]["to"] = src, dst
+        pipeline.src, pipeline.dst = src, dst
+        save_config(CONFIG_PATH, config)
+
+    def on_capture_geometry(x, y, w, h):
+        overlay.dock_to(x, y, w, h)
+        save_config(CONFIG_PATH, config)
+
+    def on_lock(locked):
+        if locked:
+            if not config["youdao"]["app_key"] or not config["youdao"]["app_secret"]:
+                main_window.update_status("请先填写有道应用ID 和密钥", is_error=True)
+                main_window.start_btn.setChecked(False)
+                return
+            capture_box.set_locked(True)
+            if not worker.isRunning():
+                worker.start()
+        else:
+            worker.stop()
+            worker.wait(2000)
+            capture_box.set_locked(False)
+
+    def on_translation(src, dst):
+        overlay.set_text(src, dst)
+        history.add_translation(src, dst)
+
+    main_window.creds_changed.connect(on_creds)
+    main_window.lang_changed.connect(on_lang)
+    main_window.show_capture_requested.connect(capture_box.show)
+    main_window.lock_toggled.connect(on_lock)
+    main_window.show_overlay_requested.connect(
+        lambda show: overlay.setVisible(show)
+    )
+    main_window.view_history_requested.connect(history.show)
+    main_window.clear_history_requested.connect(history.clear)
+
+    capture_box.geometry_changed.connect(on_capture_geometry)
+    worker.translation_ready.connect(on_translation)
+    worker.error_occurred.connect(lambda m: main_window.update_status(f"错误: {m}", is_error=True))
+
+    # 初始吸附 + 显示
+    cap = config["capture"]
+    if cap["w"] > 0:
+        overlay.dock_to(cap["x"], cap["y"], cap["w"], cap["h"])
     main_window.show()
-    # history_panel.show()  # Now shown via "View History" button
+    overlay.show()
 
-    logger.info("CaptureMonitor started successfully")
+    def cleanup():
+        worker.stop()
+        worker.wait(2000)
+        hotkeys.unregister()
+        save_config(CONFIG_PATH, config)
 
-    # Run application
+    app.aboutToQuit.connect(cleanup)
+    logger.info("实时翻译悬浮框已启动")
     sys.exit(app.exec())
 
 
