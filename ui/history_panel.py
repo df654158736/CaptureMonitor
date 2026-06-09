@@ -1,5 +1,6 @@
 """译文回看面板:记录每次翻译(原文 + 译文),可导出。"""
 
+import html as html_lib
 import logging
 from datetime import datetime
 
@@ -7,6 +8,7 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QTextEdit, QPushButton, QLabel, QFileDialog
 )
 from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtGui import QTextCursor
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +38,10 @@ class HistoryPanel(QWidget):
 
         self.text_edit = QTextEdit()
         self.text_edit.setReadOnly(True)
+        self.text_edit.setStyleSheet(
+            "QTextEdit { background:#fbfbfd; border:1px solid #d8dbe0;"
+            " border-radius:6px; padding:6px; font-size:13px; }"
+        )
         layout.addWidget(self.text_edit)
 
         btns = QHBoxLayout()
@@ -53,7 +59,25 @@ class HistoryPanel(QWidget):
 
     def add_translation(self, src: str, dst: str):
         ts = datetime.now().strftime("%H:%M:%S")
-        self.text_edit.append(f"[{ts}] {src}\n    [译] {dst}\n")
+        src_e = html_lib.escape(src).replace("\n", "<br>") or "(空)"
+        dst_e = html_lib.escape(dst).replace("\n", "<br>") or "(空)"
+        # 浅色卡片 + 左侧蓝色竖条 + 分隔线,清晰区分每条记录
+        block = (
+            f'<table width="100%" cellspacing="0" cellpadding="6" '
+            f'style="margin-bottom:8px; background:#ffffff;">'
+            f'<tr>'
+            f'<td width="4" style="background:#3a7afe;"></td>'
+            f'<td>'
+            f'<span style="color:#3a7afe; font-weight:bold; font-size:11px;">⏱ {ts}</span>'
+            f'<br><span style="color:#8a8f99;">{src_e}</span>'
+            f'<br><span style="color:#1b1d22; font-size:15px; font-weight:bold;">{dst_e}</span>'
+            f'</td></tr></table>'
+            f'<div style="border-bottom:1px solid #e3e6ea; margin-bottom:8px;"></div>'
+        )
+        cursor = self.text_edit.textCursor()
+        cursor.movePosition(QTextCursor.MoveOperation.End)
+        cursor.insertHtml(block)
+
         self._count += 1
         self.status_label.setText(f"{self._count} 条记录")
         self.text_edit.verticalScrollBar().setValue(

@@ -51,8 +51,8 @@ class MainWindow(QMainWindow):
         layout.addWidget(engine_group)
 
         # 有道密钥
-        yd_group = QGroupBox("有道密钥")
-        yd_form = QFormLayout(yd_group)
+        self.yd_group = QGroupBox("有道密钥")
+        yd_form = QFormLayout(self.yd_group)
         self.appkey_edit = QLineEdit(self._config["youdao"]["app_key"])
         self.yd_secret_edit = QLineEdit(self._config["youdao"]["app_secret"])
         self.yd_secret_edit.setEchoMode(QLineEdit.EchoMode.Password)
@@ -60,11 +60,11 @@ class MainWindow(QMainWindow):
         self.yd_secret_edit.editingFinished.connect(self._on_youdao_creds)
         yd_form.addRow("应用ID:", self.appkey_edit)
         yd_form.addRow("密钥:", self.yd_secret_edit)
-        layout.addWidget(yd_group)
+        layout.addWidget(self.yd_group)
 
         # 火山密钥
-        vk_group = QGroupBox("火山密钥")
-        vk_form = QFormLayout(vk_group)
+        self.vk_group = QGroupBox("火山密钥")
+        vk_form = QFormLayout(self.vk_group)
         self.vk_ak_edit = QLineEdit(self._config["volcano"]["access_key"])
         self.vk_sk_edit = QLineEdit(self._config["volcano"]["secret_key"])
         self.vk_sk_edit.setEchoMode(QLineEdit.EchoMode.Password)
@@ -72,17 +72,19 @@ class MainWindow(QMainWindow):
         self.vk_sk_edit.editingFinished.connect(self._on_volcano_creds)
         vk_form.addRow("AccessKey ID:", self.vk_ak_edit)
         vk_form.addRow("AccessKey Secret:", self.vk_sk_edit)
-        layout.addWidget(vk_group)
+        layout.addWidget(self.vk_group)
+
+        self._update_cred_visibility()  # 只显示当前引擎的密钥框
 
         # 语言方向
         lang_group = QGroupBox("语言方向")
         lang_layout = QHBoxLayout(lang_group)
         self.from_combo = QComboBox()
         self.from_combo.addItem("英文", "en")
-        self.from_combo.addItem("日文", "jp")
+        self.from_combo.addItem("日文", "ja")
         self.from_combo.addItem("自动", "auto")
         self.to_combo = QComboBox()
-        self.to_combo.addItem("中文", "zh-CHS")
+        self.to_combo.addItem("中文", "zh")
         self.from_combo.currentIndexChanged.connect(self._on_lang)
         self.to_combo.currentIndexChanged.connect(self._on_lang)
         lang_layout.addWidget(self.from_combo)
@@ -124,7 +126,13 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.status_label)
         layout.addStretch()
 
+    def _update_cred_visibility(self):
+        name = self.engine_combo.currentData()
+        self.yd_group.setVisible(name == "youdao")
+        self.vk_group.setVisible(name == "volcano")
+
     def _on_engine(self):
+        self._update_cred_visibility()
         self.backend_changed.emit(self.engine_combo.currentData())
 
     def _on_youdao_creds(self):
