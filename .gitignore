@@ -30,6 +30,7 @@ ENV/
 .idea/
 *.swp
 *.swo
+.claude
 
 # PyInstaller
 build/
