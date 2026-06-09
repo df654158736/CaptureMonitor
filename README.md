@@ -1,78 +1,39 @@
-# CaptureMonitor
+# 实时翻译悬浮框 (CaptureMonitor)
 
-A Windows desktop tool for monitoring screen regions and detecting text changes.
+Windows 11 上的实时游戏翻译工具:拖一个采集框罩在游戏英文文字上,自动识别变化并通过**有道图片翻译合一 API(`ocrtransapi`)**翻译,译文显示在自动吸附其下方的悬浮框里。
 
-## Features
+## 特性
 
-- **Screen Region Selection**: Drag to select any area of your screen with a full-screen overlay
-- **OCR Text Recognition**: Support for both PaddleOCR and Windows OCR API
-- **Change Detection**: Automatically detects when text changes in the monitored region
-- **History Panel**: View up to 1000 history entries with export functionality
-- **Plugin System**: Extensible plugin architecture for custom text processing
-- **Independent Windows**: Main control window, overlay, and history panel operate independently
+- **采集框**:可拖动/缩放,直接罩在要翻译的文字上;开始后变细边框、鼠标穿透(不挡游戏)。
+- **译文悬浮框**:默认吸附在采集框下方并跟随;可拖离自由摆放、可调透明度、可显示原文。
+- **快**:后台线程截图,本地变化检测 + 防抖,内容不变不调 API;LRU 缓存让重复对话秒出;UI 永不卡顿。
+- **准**:DPI 物理像素截图,合一 API 带版面上下文,显式英→中。
+- **触发**:自动检测画面稳定变化,或按热键 `Alt+D` 立即翻译。
 
-## Requirements
-
-- Windows 11
-- Python 3.8+
-
-## Installation
-
-1. Clone or download this repository
-2. Install dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-## Usage
-
-1. Run the application:
-   ```bash
-   python main.py
-   ```
-
-2. Click "Show Monitor Frame" to display the overlay
-3. Drag on the overlay to select the region to monitor
-4. Select an OCR engine and plugin
-5. Set the monitoring interval (default: 2 seconds)
-6. Click "Start Monitoring"
-
-## OCR Engines
-
-### PaddleOCR (Recommended)
-- Best Chinese text recognition accuracy
-- Requires additional installation space (~200MB)
-
-### Windows OCR
-- Built into Windows 11
-- Zero additional dependencies
-- Good accuracy for English text
-
-## Plugins
-
-Plugins are Python files in the `./plugins/` directory that implement:
-
-```python
-def plugin_info() -> dict:
-    return {"name": "Plugin Name", "description": "...", "version": "1.0.0"}
-
-def process_text(text: str) -> str:
-    # Process OCR text
-    return processed_text
-
-def format_change(old: str, new: str) -> str:
-    # Format change for display
-    return f"{old} -> {new}"
-```
-
-## Building Executable
-
-To create a standalone executable:
+## 安装
 
 ```bash
-pyinstaller --onefile --windowed main.py
+pip install -r requirements.txt
+```
+
+## 使用
+
+1. 到[有道智云](https://ai.youdao.com/)开通**图片翻译**服务,拿到应用ID 和密钥。
+2. 运行 `python main.py`,在控制面板填入应用ID 和密钥。
+3. 点「显示采集框」,把采集框拖到游戏文字上、调好大小。
+4. 点「开始翻译」。译文出现在采集框下方;按 `Alt+D` 可手动刷新。
+
+## 配置
+
+设置存于 `config.json`(已 gitignore,含密钥,勿提交)。
+
+## 开发
+
+```bash
+pip install -r requirements-dev.txt
+python -m pytest
 ```
 
 ## License
 
-MIT License
+MIT
