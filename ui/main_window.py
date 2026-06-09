@@ -1,268 +1,121 @@
-"""
-Main control window for the CaptureMonitor application.
-"""
+"""主控制面板:密钥 / 语言 / 触发 / 采集框 / 译文框 / 开始停止。"""
 
-from PyQt6.QtWidgets import (
-    QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QLabel, QPushButton, QComboBox, QSpinBox,
-    QMessageBox, QGroupBox, QCheckBox
-)
-from PyQt6.QtCore import Qt, pyqtSignal
-from typing import List, Optional
 import logging
 
-from core.ocr.base import BaseOCREngine
-from core.ocr.paddle_ocr import PaddleOCREngine
-from core.ocr.windows_ocr import WindowsOCREngine
-from core.ocr.tesseract_ocr import TesseractOCREngine
-from core.plugin_loader import Plugin
-from core.monitor import Monitor
+from PyQt6.QtWidgets import (
+    QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QFormLayout,
+    QLabel, QPushButton, QLineEdit, QComboBox, QGroupBox
+)
+from PyQt6.QtCore import Qt, pyqtSignal
 
 logger = logging.getLogger(__name__)
 
 
 class MainWindow(QMainWindow):
-    """Main control window for the application."""
-
-    # Signals
-    show_overlay_requested = pyqtSignal()
-    hide_overlay_requested = pyqtSignal()
-    start_monitoring_requested = pyqtSignal()
-    stop_monitoring_requested = pyqtSignal()
-    clear_history_requested = pyqtSignal()
+    show_capture_requested = pyqtSignal()
+    lock_toggled = pyqtSignal(bool)           # True=锁定开始, False=解锁停止
+    show_overlay_requested = pyqtSignal(bool)
     view_history_requested = pyqtSignal()
-    ocr_changed = pyqtSignal(object)  # BaseOCREngine
-    plugin_changed = pyqtSignal(object)  # Optional[Plugin]
-    interval_changed = pyqtSignal(float)  # seconds
-    translation_changed = pyqtSignal(bool)  # enabled
+    clear_history_requested = pyqtSignal()
+    creds_changed = pyqtSignal(str, str)      # app_key, app_secret
+    lang_changed = pyqtSignal(str, str)       # from, to
 
-    def __init__(self):
+    def __init__(self, config: dict):
         super().__init__()
-        self.setWindowTitle("\u5c4f\u5e55\u6587\u5b57\u76d1\u63a7\u5de5\u5177")
-        self.setMinimumSize(400, 300)
-
-        self.plugins: List[Plugin] = []
-        self.current_ocr: Optional[BaseOCREngine] = None
-        self.current_plugin: Optional[Plugin] = None
-
+        self._config = config
+        self.setWindowTitle("实时翻译悬浮框")
+        self.setMinimumSize(360, 380)
         self._setup_ui()
 
     def _setup_ui(self):
-        """Setup the user interface."""
-        central_widget = QWidget()
-        self.setCentralWidget(central_widget)
+        central = QWidget()
+        self.setCentralWidget(central)
+        layout = QVBoxLayout(central)
+        layout.setSpacing(12)
+        layout.setContentsMargins(16, 16, 16, 16)
 
-        layout = QVBoxLayout(central_widget)
-        layout.setSpacing(15)
-        layout.setContentsMargins(20, 20, 20, 20)
+        # 有道密钥
+        cred_group = QGroupBox("有道图片翻译密钥")
+        cred_form = QFormLayout(cred_group)
+        self.appkey_edit = QLineEdit(self._config["youdao"]["app_key"])
+        self.secret_edit = QLineEdit(self._config["youdao"]["app_secret"])
+        self.secret_edit.setEchoMode(QLineEdit.EchoMode.Password)
+        self.appkey_edit.editingFinished.connect(self._on_creds)
+        self.secret_edit.editingFinished.connect(self._on_creds)
+        cred_form.addRow("应用ID:", self.appkey_edit)
+        cred_form.addRow("密钥:", self.secret_edit)
+        layout.addWidget(cred_group)
 
-        # OCR Engine Selection
-        ocr_group = QGroupBox("OCR \u5f15\u64ce")
-        ocr_layout = QVBoxLayout(ocr_group)
+        # 语言方向
+        lang_group = QGroupBox("语言方向")
+        lang_layout = QHBoxLayout(lang_group)
+        self.from_combo = QComboBox()
+        self.from_combo.addItem("英文", "en")
+        self.from_combo.addItem("日文", "jp")
+        self.from_combo.addItem("自动", "auto")
+        self.to_combo = QComboBox()
+        self.to_combo.addItem("中文", "zh-CHS")
+        self.from_combo.currentIndexChanged.connect(self._on_lang)
+        self.to_combo.currentIndexChanged.connect(self._on_lang)
+        lang_layout.addWidget(self.from_combo)
+        lang_layout.addWidget(QLabel("→"))
+        lang_layout.addWidget(self.to_combo)
+        layout.addWidget(lang_group)
 
-        self.ocr_combo = QComboBox()
-        self.ocr_combo.addItem("Tesseract OCR (推荐)", "tesseract")
-        self.ocr_combo.addItem("PaddleOCR (实验性)", "paddle")
-        self.ocr_combo.addItem("Windows OCR", "windows")
-        self.ocr_combo.currentIndexChanged.connect(self._on_ocr_changed)
-        ocr_layout.addWidget(self.ocr_combo)
+        # 控制
+        ctrl_group = QGroupBox("控制")
+        ctrl = QVBoxLayout(ctrl_group)
+        self.capture_btn = QPushButton("显示采集框")
+        self.capture_btn.setCheckable(True)
+        self.capture_btn.toggled.connect(self._on_capture_toggle)
+        ctrl.addWidget(self.capture_btn)
 
-        layout.addWidget(ocr_group)
+        self.start_btn = QPushButton("开始翻译")
+        self.start_btn.setCheckable(True)
+        self.start_btn.toggled.connect(self._on_start_toggle)
+        ctrl.addWidget(self.start_btn)
 
-        # Plugin Selection
-        plugin_group = QGroupBox("\u63d2\u4ef6")
-        plugin_layout = QVBoxLayout(plugin_group)
-
-        self.plugin_combo = QComboBox()
-        self.plugin_combo.currentIndexChanged.connect(self._on_plugin_changed)
-        plugin_layout.addWidget(self.plugin_combo)
-
-        layout.addWidget(plugin_group)
-
-        # Interval Setting
-        interval_group = QGroupBox("\u76d1\u63a7\u95f4\u9694")
-        interval_layout = QHBoxLayout(interval_group)
-
-        self.interval_spin = QSpinBox()
-        self.interval_spin.setRange(1, 60)
-        self.interval_spin.setValue(2)
-        self.interval_spin.setSuffix(" \u79d2")
-        self.interval_spin.valueChanged.connect(self._on_interval_changed)
-        interval_layout.addWidget(self.interval_spin)
-
-        layout.addWidget(interval_group)
-
-        # Translation Setting
-        translation_group = QGroupBox("翻译设置")
-        translation_layout = QVBoxLayout(translation_group)
-
-        self.translate_checkbox = QCheckBox("启用翻译 (中文化)")
-        self.translate_checkbox.setChecked(False)
-        self.translate_checkbox.stateChanged.connect(self._on_translation_changed)
-        translation_layout.addWidget(self.translate_checkbox)
-
-        self.translate_status = QLabel("需要安装: pip install googletrans-py")
-        self.translate_status.setStyleSheet("color: gray; font-size: 11px;")
-        translation_layout.addWidget(self.translate_status)
-
-        layout.addWidget(translation_group)
-
-        # Control Buttons
-        control_group = QGroupBox("\u63a7\u5236")
-        control_layout = QVBoxLayout(control_group)
-
-        # Overlay button
-        self.overlay_btn = QPushButton("\u663e\u793a\u76d1\u63a7\u6846\u67b6")
+        self.overlay_btn = QPushButton("显示译文框")
         self.overlay_btn.setCheckable(True)
-        self.overlay_btn.toggled.connect(self._on_overlay_toggled)
-        control_layout.addWidget(self.overlay_btn)
+        self.overlay_btn.setChecked(True)
+        self.overlay_btn.toggled.connect(self.show_overlay_requested.emit)
+        ctrl.addWidget(self.overlay_btn)
 
-        # Start/Stop buttons
-        btn_layout = QHBoxLayout()
+        self.history_btn = QPushButton("查看译文回看")
+        self.history_btn.clicked.connect(self.view_history_requested.emit)
+        ctrl.addWidget(self.history_btn)
+        layout.addWidget(ctrl_group)
 
-        self.start_btn = QPushButton("\u5f00\u59cb\u76d1\u63a7")
-        self.start_btn.clicked.connect(self._on_start_clicked)
-        btn_layout.addWidget(self.start_btn)
+        hint = QLabel("热键 Alt+D:立即翻译当前画面")
+        hint.setStyleSheet("color: gray; font-size: 11px;")
+        layout.addWidget(hint)
 
-        self.stop_btn = QPushButton("\u505c\u6b62\u76d1\u63a7")
-        self.stop_btn.clicked.connect(self._on_stop_clicked)
-        self.stop_btn.setEnabled(False)
-        btn_layout.addWidget(self.stop_btn)
-
-        control_layout.addLayout(btn_layout)
-
-        # View history button
-        self.view_history_btn = QPushButton("查看历史")
-        self.view_history_btn.clicked.connect(self._on_view_history_clicked)
-        control_layout.addWidget(self.view_history_btn)
-
-        # Clear history button
-        self.clear_btn = QPushButton("清空历史")
-        self.clear_btn.clicked.connect(self._on_clear_clicked)
-        control_layout.addWidget(self.clear_btn)
-
-        layout.addWidget(control_group)
-
-        # Status
-        self.status_label = QLabel("\u5c31\u7eea - \u8bf7\u9009\u62e9\u76d1\u63a7\u533a\u57df")
-        self.status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.status_label = QLabel("就绪 — 请填密钥并拖动采集框到游戏文字上")
+        self.status_label.setWordWrap(True)
         self.status_label.setStyleSheet("color: gray;")
         layout.addWidget(self.status_label)
-
-        # Add stretch to push everything up
         layout.addStretch()
 
-        # Initialize OCR
-        self._on_ocr_changed()
+    def _on_creds(self):
+        self.creds_changed.emit(self.appkey_edit.text().strip(), self.secret_edit.text().strip())
 
-    def set_plugins(self, plugins: List[Plugin]):
-        """Set the available plugins."""
-        self.plugins = plugins
-        self.plugin_combo.clear()
-        self.plugin_combo.addItem("\u65e0 (\u9ed8\u8ba4)", None)
+    def _on_lang(self):
+        self.lang_changed.emit(self.from_combo.currentData(), self.to_combo.currentData())
 
-        for plugin in plugins:
-            self.plugin_combo.addItem(f"{plugin.name} - {plugin.description}", plugin)
-
-    def _on_ocr_changed(self):
-        """Handle OCR engine change."""
-        ocr_type = self.ocr_combo.currentData()
-
-        try:
-            if ocr_type == "paddle":
-                self.current_ocr = PaddleOCREngine()
-            elif ocr_type == "tesseract":
-                self.current_ocr = TesseractOCREngine()
-            elif ocr_type == "windows":
-                self.current_ocr = WindowsOCREngine()
-
-            if self.current_ocr and self.current_ocr.is_available:
-                self.ocr_changed.emit(self.current_ocr)
-            else:
-                QMessageBox.warning(
-                    self,
-                    "OCR\u5f15\u64ce\u4e0d\u53ef\u7528",
-                    f"{self.current_ocr.name if self.current_ocr else 'OCR'} \u4e0d\u53ef\u7528\u3002\n\u8bf7\u68c0\u67e5\u60a8\u7684\u5b89\u88c5\u3002"
-                )
-
-        except Exception as e:
-            logger.error(f"Error initializing OCR engine: {e}")
-            QMessageBox.critical(
-                self,
-                "OCR\u9519\u8bef",
-                f"\u521d\u59cb\u5316OCR\u5f15\u64ce\u5931\u8d25:\n{str(e)}"
-            )
-
-    def _on_plugin_changed(self):
-        """Handle plugin selection change."""
-        self.current_plugin = self.plugin_combo.currentData()
-        self.plugin_changed.emit(self.current_plugin)
-
-    def _on_interval_changed(self):
-        """Handle interval change."""
-        seconds = self.interval_spin.value()
-        self.interval_changed.emit(float(seconds))
-
-    def _on_translation_changed(self, state):
-        """Handle translation checkbox change."""
-        enabled = state == Qt.CheckState.Checked.value
-        self.translation_changed.emit(enabled)
-        if enabled:
-            self.translate_status.setText("翻译已启用")
-            self.translate_status.setStyleSheet("color: green; font-size: 11px;")
-        else:
-            self.translate_status.setText("翻译已禁用")
-            self.translate_status.setStyleSheet("color: gray; font-size: 11px;")
-
-    def _on_overlay_toggled(self, checked: bool):
-        """Handle overlay toggle."""
+    def _on_capture_toggle(self, checked):
+        self.capture_btn.setText("隐藏采集框" if checked else "显示采集框")
         if checked:
-            self.overlay_btn.setText("\u9690\u85cf\u76d1\u63a7\u6846\u67b6")
-            self.show_overlay_requested.emit()
-        else:
-            self.overlay_btn.setText("\u663e\u793a\u76d1\u63a7\u6846\u67b6")
-            self.hide_overlay_requested.emit()
+            self.show_capture_requested.emit()
 
-    def _on_start_clicked(self):
-        """Handle start button click."""
-        logger.info("Start button clicked")
-        self.start_monitoring_requested.emit()
-        self.start_btn.setEnabled(False)
-        self.stop_btn.setEnabled(True)
-        self.status_label.setText("\u76d1\u63a7\u4e2d...")
-        self.status_label.setStyleSheet("color: green;")
-
-    def _on_stop_clicked(self):
-        """Handle stop button click."""
-        self.stop_monitoring_requested.emit()
-        self.start_btn.setEnabled(True)
-        self.stop_btn.setEnabled(False)
-        self.status_label.setText("\u76d1\u63a7\u5df2\u505c\u6b62")
-        self.status_label.setStyleSheet("color: gray;")
-
-    def _on_clear_clicked(self):
-        """Handle clear history button click."""
-        self.clear_history_requested.emit()
-
-    def _on_view_history_clicked(self):
-        """Handle view history button click."""
-        self.view_history_requested.emit()
+    def _on_start_toggle(self, checked):
+        self.start_btn.setText("停止翻译" if checked else "开始翻译")
+        self.lock_toggled.emit(checked)
+        self.update_status("翻译中…" if checked else "已停止")
 
     def update_status(self, message: str, is_error: bool = False):
-        """Update the status label."""
         self.status_label.setText(message)
-        if is_error:
-            self.status_label.setStyleSheet("color: red;")
-        else:
-            self.status_label.setStyleSheet("color: black;")
-
-    def set_monitoring_state(self, is_running: bool):
-        """Update UI based on monitoring state."""
-        self.start_btn.setEnabled(not is_running)
-        self.stop_btn.setEnabled(is_running)
+        self.status_label.setStyleSheet("color: red;" if is_error else "color: green;")
 
     def closeEvent(self, event):
-        """Handle window close."""
-        # Stop monitoring before closing
-        self.stop_monitoring_requested.emit()
+        self.lock_toggled.emit(False)
         event.accept()
