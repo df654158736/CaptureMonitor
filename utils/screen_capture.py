@@ -1,26 +1,31 @@
-"""
-Screen capture utility for capturing regions of the screen.
+"""屏幕区域截图(mss)+ 逻辑坐标→物理像素换算。
+
+mss 实例非线程安全:用 threading.local 保证每线程一个实例。
 """
 
+import threading
+
+import mss
 from PIL import Image
-import pyautogui
+
+_local = threading.local()
 
 
-def capture_region(x: int, y: int, width: int, height: int) -> Image.Image:
-    """
-    Capture a region of the screen.
+def physical_rect(x, y, w, h, scale):
+    """Qt 逻辑坐标矩形 → 物理像素矩形(四舍五入)。"""
+    return (round(x * scale), round(y * scale), round(w * scale), round(h * scale))
 
-    Args:
-        x: X coordinate of the top-left corner
-        y: Y coordinate of the top-left corner
-        width: Width of the region
-        height: Height of the region
 
-    Returns:
-        PIL Image of the captured region
-    """
-    if width <= 0 or height <= 0:
-        return Image.new('RGB', (1, 1), color='white')
+def _get_sct():
+    if getattr(_local, "sct", None) is None:
+        _local.sct = mss.mss()
+    return _local.sct
 
-    screenshot = pyautogui.screenshot(region=(x, y, width, height))
-    return screenshot
+
+def capture_region(x: int, y: int, w: int, h: int) -> Image.Image:
+    """按物理像素坐标截取一块区域,返回 RGB PIL.Image。"""
+    if w <= 0 or h <= 0:
+        return Image.new("RGB", (1, 1), "white")
+    monitor = {"left": int(x), "top": int(y), "width": int(w), "height": int(h)}
+    shot = _get_sct().grab(monitor)
+    return Image.frombytes("RGB", shot.size, shot.bgra, "raw", "BGRX")
