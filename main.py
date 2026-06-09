@@ -65,6 +65,7 @@ def main():
                             config["capture"]["w"], config["capture"]["h"]),
         get_scale=capture_box.current_scale,
         sample_interval_ms=config["detection"]["sample_interval_ms"],
+        debug_dir=os.path.dirname(os.path.abspath(__file__)),
     )
 
     # 热键
@@ -108,6 +109,7 @@ def main():
     main_window.creds_changed.connect(on_creds)
     main_window.lang_changed.connect(on_lang)
     main_window.show_capture_requested.connect(capture_box.show)
+    main_window.hide_capture_requested.connect(capture_box.hide)
     main_window.lock_toggled.connect(on_lock)
     main_window.show_overlay_requested.connect(
         lambda show: overlay.setVisible(show)
@@ -117,6 +119,7 @@ def main():
 
     capture_box.geometry_changed.connect(on_capture_geometry)
     worker.translation_ready.connect(on_translation)
+    worker.status_changed.connect(lambda m: main_window.update_status(m))
     worker.error_occurred.connect(lambda m: main_window.update_status(f"错误: {m}", is_error=True))
 
     # 初始吸附 + 显示

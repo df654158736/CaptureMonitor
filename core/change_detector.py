@@ -41,6 +41,7 @@ class ChangeDetector:
         self._last_change_at = None
         self._pending = False
         self._last_translated_hash = None
+        self.last_mad = 0.0  # 最近一次帧间平均绝对差(诊断用)
 
     def feed(self, frame: np.ndarray, now: float) -> str:
         small = _to_small_gray(frame)
@@ -53,6 +54,7 @@ class ChangeDetector:
             return CHANGING
 
         mad = float(np.mean(np.abs(small - self._prev_small)))
+        self.last_mad = mad
         self._prev_small = small
 
         if mad > self.change_threshold:

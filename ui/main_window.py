@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 
 class MainWindow(QMainWindow):
     show_capture_requested = pyqtSignal()
+    hide_capture_requested = pyqtSignal()
     lock_toggled = pyqtSignal(bool)           # True=锁定开始, False=解锁停止
     show_overlay_requested = pyqtSignal(bool)
     view_history_requested = pyqtSignal()
@@ -106,6 +107,8 @@ class MainWindow(QMainWindow):
         self.capture_btn.setText("隐藏采集框" if checked else "显示采集框")
         if checked:
             self.show_capture_requested.emit()
+        else:
+            self.hide_capture_requested.emit()
 
     def _on_start_toggle(self, checked):
         self.start_btn.setText("停止翻译" if checked else "开始翻译")
