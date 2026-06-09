@@ -18,14 +18,16 @@ class MainWindow(QMainWindow):
     show_overlay_requested = pyqtSignal(bool)
     view_history_requested = pyqtSignal()
     clear_history_requested = pyqtSignal()
-    creds_changed = pyqtSignal(str, str)      # app_key, app_secret
+    backend_changed = pyqtSignal(str)         # youdao | volcano
+    youdao_creds_changed = pyqtSignal(str, str)   # app_key, app_secret
+    volcano_creds_changed = pyqtSignal(str, str)  # access_key, secret_key
     lang_changed = pyqtSignal(str, str)       # from, to
 
     def __init__(self, config: dict):
         super().__init__()
         self._config = config
         self.setWindowTitle("实时翻译悬浮框")
-        self.setMinimumSize(360, 380)
+        self.setMinimumSize(380, 520)
         self._setup_ui()
 
     def _setup_ui(self):
@@ -35,17 +37,42 @@ class MainWindow(QMainWindow):
         layout.setSpacing(12)
         layout.setContentsMargins(16, 16, 16, 16)
 
+        # 翻译引擎选择
+        engine_group = QGroupBox("翻译引擎")
+        engine_layout = QVBoxLayout(engine_group)
+        self.engine_combo = QComboBox()
+        self.engine_combo.addItem("有道", "youdao")
+        self.engine_combo.addItem("火山", "volcano")
+        idx = self.engine_combo.findData(self._config.get("backend", "youdao"))
+        if idx >= 0:
+            self.engine_combo.setCurrentIndex(idx)
+        self.engine_combo.currentIndexChanged.connect(self._on_engine)
+        engine_layout.addWidget(self.engine_combo)
+        layout.addWidget(engine_group)
+
         # 有道密钥
-        cred_group = QGroupBox("有道图片翻译密钥")
-        cred_form = QFormLayout(cred_group)
+        yd_group = QGroupBox("有道密钥")
+        yd_form = QFormLayout(yd_group)
         self.appkey_edit = QLineEdit(self._config["youdao"]["app_key"])
-        self.secret_edit = QLineEdit(self._config["youdao"]["app_secret"])
-        self.secret_edit.setEchoMode(QLineEdit.EchoMode.Password)
-        self.appkey_edit.editingFinished.connect(self._on_creds)
-        self.secret_edit.editingFinished.connect(self._on_creds)
-        cred_form.addRow("应用ID:", self.appkey_edit)
-        cred_form.addRow("密钥:", self.secret_edit)
-        layout.addWidget(cred_group)
+        self.yd_secret_edit = QLineEdit(self._config["youdao"]["app_secret"])
+        self.yd_secret_edit.setEchoMode(QLineEdit.EchoMode.Password)
+        self.appkey_edit.editingFinished.connect(self._on_youdao_creds)
+        self.yd_secret_edit.editingFinished.connect(self._on_youdao_creds)
+        yd_form.addRow("应用ID:", self.appkey_edit)
+        yd_form.addRow("密钥:", self.yd_secret_edit)
+        layout.addWidget(yd_group)
+
+        # 火山密钥
+        vk_group = QGroupBox("火山密钥")
+        vk_form = QFormLayout(vk_group)
+        self.vk_ak_edit = QLineEdit(self._config["volcano"]["access_key"])
+        self.vk_sk_edit = QLineEdit(self._config["volcano"]["secret_key"])
+        self.vk_sk_edit.setEchoMode(QLineEdit.EchoMode.Password)
+        self.vk_ak_edit.editingFinished.connect(self._on_volcano_creds)
+        self.vk_sk_edit.editingFinished.connect(self._on_volcano_creds)
+        vk_form.addRow("AccessKey ID:", self.vk_ak_edit)
+        vk_form.addRow("AccessKey Secret:", self.vk_sk_edit)
+        layout.addWidget(vk_group)
 
         # 语言方向
         lang_group = QGroupBox("语言方向")
@@ -97,8 +124,16 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.status_label)
         layout.addStretch()
 
-    def _on_creds(self):
-        self.creds_changed.emit(self.appkey_edit.text().strip(), self.secret_edit.text().strip())
+    def _on_engine(self):
+        self.backend_changed.emit(self.engine_combo.currentData())
+
+    def _on_youdao_creds(self):
+        self.youdao_creds_changed.emit(self.appkey_edit.text().strip(),
+                                       self.yd_secret_edit.text().strip())
+
+    def _on_volcano_creds(self):
+        self.volcano_creds_changed.emit(self.vk_ak_edit.text().strip(),
+                                        self.vk_sk_edit.text().strip())
 
     def _on_lang(self):
         self.lang_changed.emit(self.from_combo.currentData(), self.to_combo.currentData())

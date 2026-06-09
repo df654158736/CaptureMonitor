@@ -14,6 +14,16 @@ from .base import TranslationBackend, TranslationResult
 
 API_URL = "https://openapi.youdao.com/ocrtransapi"
 
+# 中性语言码 → 有道语言码
+_LANG_MAP = {
+    "zh": "zh-CHS", "zh-CHS": "zh-CHS", "zh-CN": "zh-CHS",
+    "en": "en", "ja": "ja", "jp": "ja", "auto": "auto",
+}
+
+
+def _map_lang(code: str) -> str:
+    return _LANG_MAP.get(code, code)
+
 
 class YoudaoImageError(Exception):
     pass
@@ -43,7 +53,7 @@ class YoudaoImageTranslate(TranslationBackend):
         salt = self._salt_fn()
         sign = build_sign(self.app_key, q, salt, self.app_secret)
         data = {
-            "from": src, "to": dst, "type": "1", "q": q,
+            "from": _map_lang(src), "to": _map_lang(dst), "type": "1", "q": q,
             "appKey": self.app_key, "salt": salt, "sign": sign,
         }
         headers = {"Content-Type": "application/x-www-form-urlencoded"}

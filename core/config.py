@@ -5,8 +5,10 @@ import os
 from copy import deepcopy
 
 DEFAULT_CONFIG = {
+    "backend": "youdao",  # 当前翻译引擎: youdao | volcano
     "youdao": {"app_key": "", "app_secret": ""},
-    "lang": {"from": "en", "to": "zh-CHS"},
+    "volcano": {"access_key": "", "secret_key": "", "region": "cn-north-1"},
+    "lang": {"from": "en", "to": "zh"},  # 中性语言码,各后端内部映射到自家代码
     "capture": {"x": 0, "y": 0, "w": 0, "h": 0},
     "trigger": {"mode": "auto+hotkey", "hotkey": "alt+d"},
     "detection": {"sample_interval_ms": 120, "stability_ms": 400, "change_threshold": 8},

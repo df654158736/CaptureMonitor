@@ -8,7 +8,7 @@ from PyQt6.QtWidgets import QApplication
 from PyQt6.QtCore import Qt
 
 from core.config import load_config, save_config
-from core.backends.youdao_image import YoudaoImageTranslate
+from core.backends import create_backend
 from core.change_detector import ChangeDetector
 from core.cache import LRUCache
 from core.pipeline import TranslationPipeline
@@ -42,7 +42,7 @@ def main():
     app.setApplicationName("RealtimeTranslate")
 
     # 后端 + 管线
-    backend = YoudaoImageTranslate(config["youdao"]["app_key"], config["youdao"]["app_secret"])
+    backend = create_backend(config)
     detector = ChangeDetector(
         change_threshold=config["detection"]["change_threshold"],
         stability_ms=config["detection"]["stability_ms"],
@@ -73,11 +73,35 @@ def main():
     hotkeys.register(config["trigger"]["hotkey"], worker.request_force)
 
     # ---- 接线 ----
-    def on_creds(app_key, app_secret):
+    def refresh_backend(force_now=False):
+        """按当前配置重建后端;切换引擎/改密钥后清缓存,可选立即翻译当前帧。"""
+        pipeline.backend = create_backend(config)
+        pipeline.cache = LRUCache()
+        save_config(CONFIG_PATH, config)
+        if force_now and worker.isRunning():
+            worker.request_force()
+
+    def creds_ok() -> bool:
+        if config["backend"] == "volcano":
+            v = config["volcano"]
+            return bool(v["access_key"] and v["secret_key"])
+        y = config["youdao"]
+        return bool(y["app_key"] and y["app_secret"])
+
+    def on_backend(name):
+        config["backend"] = name
+        main_window.update_status(f"已切换引擎: {'火山' if name == 'volcano' else '有道'}")
+        refresh_backend(force_now=True)
+
+    def on_youdao_creds(app_key, app_secret):
         config["youdao"]["app_key"] = app_key
         config["youdao"]["app_secret"] = app_secret
-        backend.app_key, backend.app_secret = app_key, app_secret
-        save_config(CONFIG_PATH, config)
+        refresh_backend()
+
+    def on_volcano_creds(access_key, secret_key):
+        config["volcano"]["access_key"] = access_key
+        config["volcano"]["secret_key"] = secret_key
+        refresh_backend()
 
     def on_lang(src, dst):
         config["lang"]["from"], config["lang"]["to"] = src, dst
@@ -90,8 +114,9 @@ def main():
 
     def on_lock(locked):
         if locked:
-            if not config["youdao"]["app_key"] or not config["youdao"]["app_secret"]:
-                main_window.update_status("请先填写有道应用ID 和密钥", is_error=True)
+            if not creds_ok():
+                engine = "火山" if config["backend"] == "volcano" else "有道"
+                main_window.update_status(f"请先填写{engine}密钥", is_error=True)
                 main_window.start_btn.setChecked(False)
                 return
             capture_box.set_locked(True)
@@ -106,7 +131,9 @@ def main():
         overlay.set_text(src, dst)
         history.add_translation(src, dst)
 
-    main_window.creds_changed.connect(on_creds)
+    main_window.backend_changed.connect(on_backend)
+    main_window.youdao_creds_changed.connect(on_youdao_creds)
+    main_window.volcano_creds_changed.connect(on_volcano_creds)
     main_window.lang_changed.connect(on_lang)
     main_window.show_capture_requested.connect(capture_box.show)
     main_window.hide_capture_requested.connect(capture_box.hide)
