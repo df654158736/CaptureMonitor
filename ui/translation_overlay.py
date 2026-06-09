@@ -10,9 +10,17 @@ from PyQt6.QtCore import Qt, pyqtSignal
 logger = logging.getLogger(__name__)
 
 
+SNAP_DISTANCE = 40  # 译文框拖到吸附点这么近(逻辑像素)即自动吸附
+
+
 def dock_rect_below(cap_x, cap_y, cap_w, cap_h, overlay_h, gap=6):
     """采集框矩形 → 译文框吸附在其正下方的矩形(宽度跟随采集框)。"""
     return (cap_x, cap_y + cap_h + gap, cap_w, overlay_h)
+
+
+def within_snap(target_x, target_y, dock_x, dock_y, threshold=SNAP_DISTANCE):
+    """译文框左上角(target)是否已靠近吸附点(dock)到可吸附的距离。"""
+    return abs(target_x - dock_x) <= threshold and abs(target_y - dock_y) <= threshold
 
 
 class TranslationOverlay(QWidget):
@@ -22,6 +30,7 @@ class TranslationOverlay(QWidget):
         super().__init__()
         self._config = config
         self._drag_offset = None
+        self._cap_rect = None  # 最近一次采集框几何,用于吸附判定
         self._show_source = config["overlay"].get("show_source", False)
 
         self.setWindowFlags(
@@ -70,22 +79,46 @@ class TranslationOverlay(QWidget):
         self.src_label.setVisible(show)
 
     def dock_to(self, cap_x, cap_y, cap_w, cap_h):
-        """被采集框调用:吸附到采集框下方(独立模式下忽略)。"""
+        """被采集框调用:记住采集框位置;未脱离时吸附到其下方并跟随。"""
+        self._cap_rect = (cap_x, cap_y, cap_w, cap_h)
         if self._config["overlay"].get("detached"):
             return
         x, y, w, h = dock_rect_below(cap_x, cap_y, cap_w, cap_h, self.height())
         self.setGeometry(x, y, w, h)
 
+    def redock(self):
+        """显式重新吸附回采集框下方(双击触发)。"""
+        if self._cap_rect:
+            self._config["overlay"]["detached"] = False
+            self.dock_to(*self._cap_rect)
+
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
             self._drag_offset = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
 
+    def mouseDoubleClickEvent(self, event):
+        # 双击译文框 → 立即吸附回采集框下方
+        self.redock()
+
     def mouseMoveEvent(self, event):
-        if self._drag_offset is not None:
-            if not self._config["overlay"].get("detached"):
-                self._config["overlay"]["detached"] = True
-                self.detached.emit()
-            self.move(event.globalPosition().toPoint() - self._drag_offset)
+        if self._drag_offset is None:
+            return
+        target = event.globalPosition().toPoint() - self._drag_offset
+
+        # 拖到采集框下方吸附点附近 → 自动吸附并重新附着
+        if self._cap_rect:
+            dx, dy, dw, dh = dock_rect_below(*self._cap_rect, self.height())
+            if within_snap(target.x(), target.y(), dx, dy):
+                if self._config["overlay"].get("detached"):
+                    self._config["overlay"]["detached"] = False
+                self.setGeometry(dx, dy, dw, dh)
+                return
+
+        # 否则视为脱离,自由移动
+        if not self._config["overlay"].get("detached"):
+            self._config["overlay"]["detached"] = True
+            self.detached.emit()
+        self.move(target)
 
     def mouseReleaseEvent(self, event):
         self._drag_offset = None
