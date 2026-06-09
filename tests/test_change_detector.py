@@ -46,3 +46,25 @@ def test_hash_differs_for_different_frames():
     d1.feed(BLACK, now=0.0)
     d2.feed(WHITE, now=0.0)
     assert d1.current_hash() != d2.current_hash()
+
+
+def test_gradual_change_then_settle_triggers():
+    """逐步累积的小幅变化(每帧间差异很小)停下来后,新稳定画面应触发翻译。
+
+    复现日志中"画面停在新内容上却从不翻译"的场景:旧逻辑要求出现帧间大跳变来 arm,
+    渐变不会 arm,于是永不触发。新逻辑只看"hash 稳定且与上次翻译不同"。
+    """
+    d = ChangeDetector(stability_ms=300)
+    t = 0.0
+    last_event = None
+    # 每步均匀 +5(帧间差异很小),但每帧内容(dHash 均值字节)都在变
+    for level in range(0, 60, 5):
+        frame = np.full((32, 32, 3), level, dtype=np.uint8)
+        last_event = d.feed(frame, now=t)
+        t += 0.12
+    assert last_event == CHANGING  # 渐变期间一直在变
+
+    # 停在最终内容上,保持稳定超过 stability_ms → 应触发
+    final = np.full((32, 32, 3), 55, dtype=np.uint8)
+    d.feed(final, now=t)
+    assert d.feed(final, now=t + 0.4) == STABLE_CHANGED

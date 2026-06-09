@@ -33,39 +33,48 @@ def _dhash(frame: np.ndarray, hash_size: int = 8) -> str:
 
 
 class ChangeDetector:
+    """基于 dHash 稳定性的变化检测 + 防抖。
+
+    判定逻辑:
+    - 每帧算 dHash。只要 hash 与上一帧不同 → 画面仍在变(CHANGING),刷新静止计时。
+    - hash 连续 stability_ms 保持不变 → 画面已稳定;若该稳定内容与"上次已翻译"的不同
+      → STABLE_CHANGED。
+    - 关键:不再要求出现"帧间大跳变"来触发。即使是逐步累积的小幅变化(每两帧之间差异
+      都很小,如终端逐行滚动),只要最终停下来形成一帧新的稳定画面,也会被翻译;而持续
+      滚动期间(hash 一直在变)不会反复触发。
+
+    `last_mad` 仅作诊断输出(帧间平均绝对差),不参与判定。
+    """
+
     def __init__(self, change_threshold: float = 8.0, stability_ms: int = 400):
-        self.change_threshold = change_threshold
+        self.change_threshold = change_threshold  # 保留以兼容配置;现仅用于诊断
         self.stability_ms = stability_ms
         self._prev_small = None
         self._cur_hash = None
-        self._last_change_at = None
-        self._pending = False
+        self._hash_changed_at = None
         self._last_translated_hash = None
         self.last_mad = 0.0  # 最近一次帧间平均绝对差(诊断用)
 
     def feed(self, frame: np.ndarray, now: float) -> str:
+        h = _dhash(frame)
+
+        # 诊断用:帧间平均绝对差(不参与判定)
         small = _to_small_gray(frame)
-        self._cur_hash = _dhash(frame)
-
-        if self._prev_small is None:
-            self._prev_small = small
-            self._last_change_at = now
-            self._pending = True
-            return CHANGING
-
-        mad = float(np.mean(np.abs(small - self._prev_small)))
-        self.last_mad = mad
+        if self._prev_small is not None:
+            self.last_mad = float(np.mean(np.abs(small - self._prev_small)))
         self._prev_small = small
 
-        if mad > self.change_threshold:
-            self._last_change_at = now
-            self._pending = True
+        if h != self._cur_hash:
+            self._cur_hash = h
+            self._hash_changed_at = now
             return CHANGING
 
-        if self._pending and (now - self._last_change_at) * 1000.0 >= self.stability_ms:
-            self._pending = False
-            if self._cur_hash != self._last_translated_hash:
-                self._last_translated_hash = self._cur_hash
+        # hash 与上一帧相同 → 画面静止
+        if self._hash_changed_at is None:
+            self._hash_changed_at = now
+        if (now - self._hash_changed_at) * 1000.0 >= self.stability_ms:
+            if h != self._last_translated_hash:
+                self._last_translated_hash = h
                 return STABLE_CHANGED
 
         return NO_CHANGE
@@ -76,4 +85,3 @@ class ChangeDetector:
     def notify_translated(self, hash_value: str) -> None:
         """缓存命中或强制翻译后,标记该帧已翻译,避免重复触发。"""
         self._last_translated_hash = hash_value
-        self._pending = False
