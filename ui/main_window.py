@@ -22,6 +22,7 @@ class MainWindow(QMainWindow):
     youdao_creds_changed = pyqtSignal(str, str)   # app_key, app_secret
     volcano_creds_changed = pyqtSignal(str, str)  # access_key, secret_key
     lang_changed = pyqtSignal(str, str)       # from, to
+    mode_changed = pyqtSignal(str)            # manual | auto
 
     def __init__(self, config: dict):
         super().__init__()
@@ -95,6 +96,19 @@ class MainWindow(QMainWindow):
         # 控制
         ctrl_group = QGroupBox("控制")
         ctrl = QVBoxLayout(ctrl_group)
+
+        mode_row = QHBoxLayout()
+        mode_row.addWidget(QLabel("翻译模式"))
+        self.mode_combo = QComboBox()
+        self.mode_combo.addItem("手动", "manual")
+        self.mode_combo.addItem("自动", "auto")
+        midx = self.mode_combo.findData(self._config["trigger"].get("mode", "manual"))
+        if midx >= 0:
+            self.mode_combo.setCurrentIndex(midx)
+        self.mode_combo.currentIndexChanged.connect(self._on_mode)
+        mode_row.addWidget(self.mode_combo)
+        ctrl.addLayout(mode_row)
+
         self.capture_btn = QPushButton("显示采集框")
         self.capture_btn.setCheckable(True)
         self.capture_btn.toggled.connect(self._on_capture_toggle)
@@ -116,7 +130,7 @@ class MainWindow(QMainWindow):
         ctrl.addWidget(self.history_btn)
         layout.addWidget(ctrl_group)
 
-        hint = QLabel("热键 Alt+D:立即翻译当前画面")
+        hint = QLabel("手动:点译文框或 Alt+D 翻译当前画面;自动:画面停稳自动翻译")
         hint.setStyleSheet("color: gray; font-size: 11px;")
         layout.addWidget(hint)
 
@@ -145,6 +159,9 @@ class MainWindow(QMainWindow):
 
     def _on_lang(self):
         self.lang_changed.emit(self.from_combo.currentData(), self.to_combo.currentData())
+
+    def _on_mode(self):
+        self.mode_changed.emit(self.mode_combo.currentData())
 
     def _on_capture_toggle(self, checked):
         self.capture_btn.setText("隐藏采集框" if checked else "显示采集框")

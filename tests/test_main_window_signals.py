@@ -32,3 +32,14 @@ def test_capture_toggle_emits_show_then_hide(app):
 
     assert shown == [1]
     assert hidden == [1]
+
+
+def test_mode_combo_emits_mode_changed(app):
+    from ui.main_window import MainWindow
+
+    window = MainWindow(copy.deepcopy(DEFAULT_CONFIG))  # 默认 manual
+    got = []
+    window.mode_changed.connect(lambda m: got.append(m))
+    window.mode_combo.setCurrentIndex(window.mode_combo.findData("auto"))
+    assert got == ["auto"]
+    assert window.mode_combo.currentData() == "auto"
