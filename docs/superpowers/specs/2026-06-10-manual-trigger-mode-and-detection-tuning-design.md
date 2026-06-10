@@ -66,12 +66,14 @@ if mode not in ("manual", "auto"):
 `_dhash` 保持不变(仍返回 `"{mean:02x}{bits:016x}"`,18 个十六进制字符,供缓存键去重)。新增两个纯函数:
 
 ```python
-def _bits_of(hash_str: str) -> int:   # 取后 16 位十六进制 = 64 位 dHash
-    return int(hash_str[2:], 16)
+def _bits_of(hash_str: str) -> int:   # 整串(含均值字节)= 72 位
+    return int(hash_str, 16)
 
 def _hamming(a: int, b: int) -> int:
     return bin(a ^ b).count("1")
 ```
+
+**为什么含均值字节**:纯色图(如全黑 vs 全白)的 64 位 dHash 都是全 0,只有前导均值字节能区分它们。若只比后 64 位,亮度截然不同的两帧会被判为"没动",漏触发。所以汉明距离对整串(8 位均值 + 64 位 dHash = 72 位)计算。代价:纯亮度漂移最多贡献 8 位距离;对文字内容,dHash 位变化占主导,可接受。
 
 `ChangeDetector` 重写为「锚点 + 汉明容差」:
 
@@ -82,11 +84,11 @@ def _hamming(a: int, b: int) -> int:
   2. 无锚点 → 设锚点 = bits、`_anchor_at = now`,返回 `CHANGING`。
   3. `_hamming(bits, _anchor_bits) > stable_hamming` → 画面在动:锚点重置为 bits、刷新计时,返回 `CHANGING`。
   4. 否则在容差内(画面"停住"):若 `(now - _anchor_at)*1000 >= stability_ms`:
-     - `_last_translated_bits is None` 或 `_hamming(_anchor_bits, _last_translated_bits) >= change_hamming` → 返回 `STABLE_CHANGED`。
+     - `_last_translated_bits is None` 或 `_hamming(_anchor_bits, _last_translated_bits) >= change_hamming` → **自标记** `_last_translated_bits = _anchor_bits` 后返回 `STABLE_CHANGED`。
      - 否则 `NO_CHANGE`。
   5. 其余 `NO_CHANGE`。
-- **不在 `feed` 里写 `_last_translated_bits`**,只由 `notify_translated()` 写 —— 这样翻译失败(后端抛异常、pipeline 未调 notify)下一帧会重试;成功后由 pipeline 调 `notify_translated(current_hash)` 标记,避免同一稳定窗口反复触发。
-- `notify_translated(hash_str)`:`self._last_translated_bits = _bits_of(hash_str)`。
+- `feed` 触发 `STABLE_CHANGED` 时**自标记** `_last_translated_bits`(与现版本一致,保证同一稳定窗口不反复触发,即使调用方未调 `notify_translated`)。
+- `notify_translated(hash_str)`:`self._last_translated_bits = _bits_of(hash_str)` —— 供 **force/缓存命中** 路径标记(这些路径 feed 未返回 STABLE_CHANGED,但确实翻译/返回了译文,需标记以免自动模式随后重复触发同一内容)。
 - `current_hash()`:返回 `_cur_hash`(不变)。
 
 要点:汉明容差让"轻微抖动的画面"也能算稳定 → 新对话停下时能触发(修漏触发);`change_hamming` 门槛让纯抖动不会反复触发。
