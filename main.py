@@ -44,8 +44,9 @@ def main():
     # 后端 + 管线
     backend = create_backend(config)
     detector = ChangeDetector(
-        change_threshold=config["detection"]["change_threshold"],
         stability_ms=config["detection"]["stability_ms"],
+        stable_hamming=config["detection"]["stable_hamming"],
+        change_hamming=config["detection"]["change_hamming"],
     )
     pipeline = TranslationPipeline(
         backend, detector=detector, cache=LRUCache(),
@@ -64,6 +65,7 @@ def main():
         get_region=lambda: (config["capture"]["x"], config["capture"]["y"],
                             config["capture"]["w"], config["capture"]["h"]),
         get_scale=capture_box.current_scale,
+        get_auto=lambda: config["trigger"]["mode"] == "auto",
         sample_interval_ms=config["detection"]["sample_interval_ms"],
         debug_dir=os.path.dirname(os.path.abspath(__file__)),
     )
@@ -131,10 +133,27 @@ def main():
         overlay.set_text(src, dst)
         history.add_translation(src, dst)
 
+    def on_mode(mode):
+        config["trigger"]["mode"] = mode
+        overlay.set_mode(mode)
+        save_config(CONFIG_PATH, config)
+        main_window.update_status(
+            "手动模式:点译文框或按 Alt+D 翻译" if mode == "manual"
+            else "自动模式:画面停稳自动翻译"
+        )
+
+    def on_manual_translate():
+        if worker.isRunning():
+            worker.request_force()
+        else:
+            main_window.update_status("请先点'开始翻译'并框好区域", is_error=True)
+
     main_window.backend_changed.connect(on_backend)
     main_window.youdao_creds_changed.connect(on_youdao_creds)
     main_window.volcano_creds_changed.connect(on_volcano_creds)
     main_window.lang_changed.connect(on_lang)
+    main_window.mode_changed.connect(on_mode)
+    overlay.translate_requested.connect(on_manual_translate)
     main_window.show_capture_requested.connect(capture_box.show)
     main_window.hide_capture_requested.connect(capture_box.hide)
     main_window.lock_toggled.connect(on_lock)
@@ -150,6 +169,7 @@ def main():
     worker.error_occurred.connect(lambda m: main_window.update_status(f"错误: {m}", is_error=True))
 
     # 初始吸附 + 显示
+    overlay.set_mode(config["trigger"]["mode"])
     cap = config["capture"]
     if cap["w"] > 0:
         overlay.dock_to(cap["x"], cap["y"], cap["w"], cap["h"])
