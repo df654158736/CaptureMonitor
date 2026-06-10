@@ -4,13 +4,14 @@
 
 import logging
 
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel, QSizeGrip
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel, QSizeGrip, QPushButton
 from PyQt6.QtCore import Qt, pyqtSignal
 
 logger = logging.getLogger(__name__)
 
 
 SNAP_DISTANCE = 40  # 译文框拖到吸附点这么近(逻辑像素)即自动吸附
+TAP_MOVE_TOLERANCE = 4  # 按下到松开位移 ≤ 此值(逻辑像素)视为轻点而非拖动
 
 
 def dock_rect_below(cap_x, cap_y, cap_w, cap_h, overlay_h, gap=6):
@@ -25,6 +26,7 @@ def within_snap(target_x, target_y, dock_x, dock_y, threshold=SNAP_DISTANCE):
 
 class TranslationOverlay(QWidget):
     detached = pyqtSignal()  # 用户拖动 → 脱离吸附
+    translate_requested = pyqtSignal()  # 轻点译文框 → 请求翻译当前画面
 
     def __init__(self, config: dict):
         super().__init__()
@@ -32,6 +34,10 @@ class TranslationOverlay(QWidget):
         self._drag_offset = None
         self._cap_rect = None  # 最近一次采集框几何,用于吸附判定
         self._show_source = config["overlay"].get("show_source", False)
+        self._mode = config["trigger"].get("mode", "manual")
+        self._has_text = False
+        self._press_global = None
+        self._moved = False
 
         self.setWindowFlags(
             Qt.WindowType.FramelessWindowHint
@@ -49,13 +55,24 @@ class TranslationOverlay(QWidget):
         self.src_label.setVisible(self._show_source)
         layout.addWidget(self.src_label)
 
-        self.dst_label = QLabel("等待翻译…")
+        self.dst_label = QLabel(self._placeholder())
         self.dst_label.setWordWrap(True)
         self.dst_label.setStyleSheet("color: #ffffff; font-size: 18px; font-weight: 600;")
         layout.addWidget(self.dst_label)
 
         grip = QSizeGrip(self)
         layout.addWidget(grip, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignBottom)
+
+        self.redock_btn = QPushButton("📌", self)
+        self.redock_btn.setFixedSize(24, 24)
+        self.redock_btn.setToolTip("归位到采集框下方")
+        self.redock_btn.setStyleSheet(
+            "QPushButton{background:rgba(58,122,254,210); color:white;"
+            " border:none; border-radius:12px; font-size:12px;}"
+            "QPushButton:hover{background:rgba(58,122,254,255);}"
+        )
+        self.redock_btn.clicked.connect(self.redock)
+        self.redock_btn.hide()
 
         ov = config["overlay"]
         self.setGeometry(ov["x"], ov["y"], ov["w"], ov["h"])
@@ -69,7 +86,20 @@ class TranslationOverlay(QWidget):
         painter.drawRoundedRect(self.rect(), 10, 10)
         painter.end()
 
+    def _placeholder(self) -> str:
+        return "点此翻译" if self._mode == "manual" else "等待翻译…"
+
+    def set_mode(self, mode: str):
+        self._mode = mode
+        if not self._has_text:
+            self.dst_label.setText(self._placeholder())
+
+    def resizeEvent(self, event):
+        self.redock_btn.move(self.width() - self.redock_btn.width() - 8, 8)
+        super().resizeEvent(event)
+
     def set_text(self, src: str, dst: str):
+        self._has_text = True
         if self._show_source:
             self.src_label.setText(src)
         self.dst_label.setText(dst or "(无文字)")
@@ -85,6 +115,7 @@ class TranslationOverlay(QWidget):
             return
         x, y, w, h = dock_rect_below(cap_x, cap_y, cap_w, cap_h, self.height())
         self.setGeometry(x, y, w, h)
+        self.redock_btn.hide()
 
     def redock(self):
         """显式重新吸附回采集框下方(双击触发)。"""
@@ -95,15 +126,20 @@ class TranslationOverlay(QWidget):
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
             self._drag_offset = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
-
-    def mouseDoubleClickEvent(self, event):
-        # 双击译文框 → 立即吸附回采集框下方
-        self.redock()
+            self._press_global = event.globalPosition().toPoint()
+            self._moved = False
 
     def mouseMoveEvent(self, event):
         if self._drag_offset is None:
             return
-        target = event.globalPosition().toPoint() - self._drag_offset
+        cur = event.globalPosition().toPoint()
+        if not self._moved and self._press_global is not None:
+            d = cur - self._press_global
+            if abs(d.x()) > TAP_MOVE_TOLERANCE or abs(d.y()) > TAP_MOVE_TOLERANCE:
+                self._moved = True
+        if not self._moved:
+            return
+        target = cur - self._drag_offset
 
         # 拖到采集框下方吸附点附近 → 自动吸附并重新附着
         if self._cap_rect:
@@ -112,17 +148,24 @@ class TranslationOverlay(QWidget):
                 if self._config["overlay"].get("detached"):
                     self._config["overlay"]["detached"] = False
                 self.setGeometry(dx, dy, dw, dh)
+                self.redock_btn.hide()
                 return
 
         # 否则视为脱离,自由移动
         if not self._config["overlay"].get("detached"):
             self._config["overlay"]["detached"] = True
             self.detached.emit()
+        self.redock_btn.show()
         self.move(target)
 
     def mouseReleaseEvent(self, event):
+        was_tap = self._drag_offset is not None and not self._moved
         self._drag_offset = None
-        self._save_geometry()
+        self._press_global = None
+        if was_tap:
+            self.translate_requested.emit()
+        else:
+            self._save_geometry()
 
     def _save_geometry(self):
         g = self.geometry()
