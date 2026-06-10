@@ -33,3 +33,28 @@ def test_corrupt_file_returns_defaults(tmp_path):
     path = tmp_path / "config.json"
     path.write_text("{ not json", encoding="utf-8")
     assert load_config(str(path)) == DEFAULT_CONFIG
+
+
+def test_default_mode_is_manual():
+    assert DEFAULT_CONFIG["trigger"]["mode"] == "manual"
+    assert DEFAULT_CONFIG["detection"]["stable_hamming"] == 3
+    assert DEFAULT_CONFIG["detection"]["change_hamming"] == 5
+
+
+def test_legacy_auto_hotkey_normalized(tmp_path):
+    path = tmp_path / "c.json"
+    path.write_text(json.dumps({"trigger": {"mode": "auto+hotkey"}}), encoding="utf-8")
+    assert load_config(str(path))["trigger"]["mode"] == "auto"
+
+
+def test_unknown_mode_falls_back_to_manual(tmp_path):
+    path = tmp_path / "c.json"
+    path.write_text(json.dumps({"trigger": {"mode": "whatever"}}), encoding="utf-8")
+    assert load_config(str(path))["trigger"]["mode"] == "manual"
+
+
+def test_valid_modes_preserved(tmp_path):
+    for m in ("manual", "auto"):
+        path = tmp_path / f"{m}.json"
+        path.write_text(json.dumps({"trigger": {"mode": m}}), encoding="utf-8")
+        assert load_config(str(path))["trigger"]["mode"] == m

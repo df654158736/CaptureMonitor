@@ -10,8 +10,14 @@ DEFAULT_CONFIG = {
     "volcano": {"access_key": "", "secret_key": "", "region": "cn-north-1"},
     "lang": {"from": "en", "to": "zh"},  # 中性语言码,各后端内部映射到自家代码
     "capture": {"x": 0, "y": 0, "w": 0, "h": 0},
-    "trigger": {"mode": "auto+hotkey", "hotkey": "alt+d"},
-    "detection": {"sample_interval_ms": 120, "stability_ms": 400, "change_threshold": 8},
+    "trigger": {"mode": "manual", "hotkey": "alt+d"},  # mode: manual | auto
+    "detection": {
+        "sample_interval_ms": 120,
+        "stability_ms": 400,
+        "change_threshold": 8,   # 保留,仅诊断
+        "stable_hamming": 3,     # 相邻两帧 dHash 汉明距离 ≤ 此值视为"没动"
+        "change_hamming": 5,     # 稳定内容与上次已翻译汉明距离 ≥ 此值才算"换了"
+    },
     "overlay": {
         "dock": "below", "detached": False,
         "x": 100, "y": 100, "w": 480, "h": 160,
@@ -38,7 +44,11 @@ def load_config(path: str) -> dict:
             data = json.load(f)
     except (json.JSONDecodeError, OSError):
         return deepcopy(DEFAULT_CONFIG)
-    return _deep_merge(DEFAULT_CONFIG, data)
+    merged = _deep_merge(DEFAULT_CONFIG, data)
+    mode = merged.get("trigger", {}).get("mode")
+    if mode not in ("manual", "auto"):
+        merged["trigger"]["mode"] = "auto" if (isinstance(mode, str) and "auto" in mode) else "manual"
+    return merged
 
 
 def save_config(path: str, config: dict) -> None:
